@@ -35,42 +35,51 @@ typedef struct {
 typedef struct {
     BMPFileHeader * fileHeader;
     BMPInfoHeader * infoHeader;
-    Pixel * data;
+    FILE * in;
+    FILE * out;
 } BMPImage;
 
 
 #define HEADER_SIZE 54
 
-BMPImage * recorrer_bmp(const char *bmp_in, const char *bmp_out,
+void recorrer_bmp(BMPImage *image,
     void (*callback)(Pixel *byte, void *ctx),
     void *ctx) {
+
+    
+    // Procesar cuerpo
+    Pixel pixel;
+    while (fread(&pixel, sizeof(Pixel), 1, image->in) == 1) {
+        callback(&pixel, ctx);   // aplicar algoritmo elegido
+        fwrite(&pixel, sizeof(Pixel), 1, image->out);
+    }
+
+    fclose(image->in);
+    fclose(image->out);
+    
+}
+
+BMPImage * start_bmp(const char *bmp_in, const char *bmp_out){
     FILE *in = fopen(bmp_in, "rb");
     FILE *out = fopen(bmp_out, "wb");
     if (!in || !out) {
         perror("Error abriendo archivos BMP");
         exit(1);
     }
-
     // Copiar header intacto
-    BMPFileHeader fileHeader;
-    BMPInfoHeader infoHeader;
+    BMPFileHeader * fileHeader = malloc(sizeof(BMPFileHeader));
+    BMPInfoHeader * infoHeader = malloc(sizeof(BMPInfoHeader));
 
     fread(&fileHeader, sizeof(BMPFileHeader), 1, in);
     fread(&infoHeader, sizeof(BMPInfoHeader), 1, in);
 
     fwrite(&fileHeader, sizeof(BMPFileHeader), 1, out);
     fwrite(&infoHeader, sizeof(BMPInfoHeader), 1, out);
-    // Procesar cuerpo
-    Pixel pixel;
-    while (fread(&pixel, sizeof(Pixel), 1, in) == 1) {
-        callback(&pixel, ctx);   // aplicar algoritmo elegido
-        fwrite(&pixel, sizeof(Pixel), 1, out);
-    }
 
-    fclose(in);
-    fclose(out);
     BMPImage *image = malloc(sizeof(BMPImage));
-    // Falta asignar los valores 
+    image->fileHeader = fileHeader;
+    image->infoHeader = infoHeader;
+    image->in = in;
+    image->out = out;
     return image;
-
 }
