@@ -35,6 +35,7 @@ typedef struct {
 typedef struct {
     BMPFileHeader * fileHeader;
     BMPInfoHeader * infoHeader;
+    Pixel * data;
     FILE * in;
     FILE * out;
 } BMPImage;
@@ -59,10 +60,9 @@ void recorrer_bmp(BMPImage *image,
     
 }
 
-BMPImage * start_bmp(const char *bmp_in, const char *bmp_out){
+BMPImage * start_bmp(const char *bmp_in){
     FILE *in = fopen(bmp_in, "rb");
-    FILE *out = fopen(bmp_out, "wb");
-    if (!in || !out) {
+    if (!in) {
         perror("Error abriendo archivos BMP");
         exit(1);
     }
@@ -73,13 +73,23 @@ BMPImage * start_bmp(const char *bmp_in, const char *bmp_out){
     fread(&fileHeader, sizeof(BMPFileHeader), 1, in);
     fread(&infoHeader, sizeof(BMPInfoHeader), 1, in);
 
-    fwrite(&fileHeader, sizeof(BMPFileHeader), 1, out);
-    fwrite(&infoHeader, sizeof(BMPInfoHeader), 1, out);
-
     BMPImage *image = malloc(sizeof(BMPImage));
     image->fileHeader = fileHeader;
     image->infoHeader = infoHeader;
     image->in = in;
-    image->out = out;
+    return image;
+}
+
+BMPImage * end_bmp(BMPImage *image){
+    fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out);
+    fwrite(image->infoHeader, sizeof(BMPInfoHeader), 1, image->out);
+
+    Pixel pixel;
+    while(image->data != NULL){
+        pixel = image->data[0];
+        fwrite(&pixel, sizeof(Pixel), 1, image->out);
+        image->data+=sizeof(Pixel);
+    }
+    fclose(image->out);
     return image;
 }
