@@ -12,7 +12,7 @@
 #define ERR_UNKNOWN_OPTION "Error: Unknown option '%s'\n"
 
 // Error messages for argument validation
-#define ERR_EMBED_FLAG_REQUIRED "Error: -embed flag is required\n"
+#define ERR_FLAG_REQUIRED "Error: -embed or -extract flag is required\n"
 #define ERR_IN_PARAMETER_REQUIRED "Error: -in parameter is required\n"
 #define ERR_P_PARAMETER_REQUIRED "Error: -p parameter is required\n"
 #define ERR_OUT_PARAMETER_REQUIRED "Error: -out parameter is required\n"

@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <getopt.h>
 #include "error.h"
 
 // Structure to hold all program parameters
 typedef struct {
     int embed_mode;           // 1 if -embed is specified
+    int extract_mode;         // 1 if -extract is specified
     char *input_file;         // -in file
     char *bitmap_file;        // -p bitmapfile
     char *output_file;        // -out bitmapfile
@@ -48,77 +50,42 @@ void print_usage(const char *program_name) {
 int parse_arguments(int argc, char *argv[], ProgramArgs *args) {
     // Initialize all fields to default values
     memset(args, 0, sizeof(ProgramArgs));
+
+    static struct option long_opts[] = {
+        {"embed",    no_argument,       0, 'E'},
+        {"extract",  no_argument,       0, 'X'},
+        {"in",       required_argument, 0, 'i'},
+        {"p",        required_argument, 0, 'p'},
+        {"out",      required_argument, 0, 'o'},
+        {"steg",     required_argument, 0, 's'},
+        {"a",        required_argument, 0, 'a'},
+        {"m",        required_argument, 0, 'm'},
+        {"pass",     required_argument, 0, 'P'},
+        {"help",     no_argument,       0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    int long_index = 0;
     
-    for (int i = 1; i < argc; i++) {
-        // Use a switch-case on the first character for efficiency, then strcmp for full match
-        switch (argv[i][0]) {
-            case '-':
-                if (strcmp(argv[i], "-embed") == 0) {
-                    args->embed_mode = 1;
-                }
-                else if (strcmp(argv[i], "-in") == 0) {
-                    if (i + 1 >= argc) {
-                        fprintf(stderr, ERR_IN_REQUIRES_FILENAME);
-                        return 0;
-                    }
-                    args->input_file = argv[++i];
-                }
-                else if (strcmp(argv[i], "-p") == 0) {
-                    if (i + 1 >= argc) {
-                        fprintf(stderr, ERR_P_REQUIRES_BITMAP);
-                        return 0;
-                    }
-                    args->bitmap_file = argv[++i];
-                }
-                else if (strcmp(argv[i], "-out") == 0) {
-                    if (i + 1 >= argc) {
-                        fprintf(stderr, ERR_OUT_REQUIRES_BITMAP);
-                        return 0;
-                    }
-                    args->output_file = argv[++i];
-                }
-                else if (strcmp(argv[i], "-steg") == 0) {
-                    if (i + 1 >= argc) {
-                        fprintf(stderr, ERR_STEG_REQUIRES_ALGORITHM);
-                        return 0;
-                    }
-                    args->steg_algorithm = argv[++i];
-                }
-                else if (strcmp(argv[i], "-a") == 0) {
-                    if (i + 1 >= argc) {
-                        fprintf(stderr, ERR_A_REQUIRES_ALGORITHM);
-                        return 0;
-                    }
-                    args->encryption_algo = argv[++i];
-                }
-                else if (strcmp(argv[i], "-m") == 0) {
-                    if (i + 1 >= argc) {
-                        fprintf(stderr, ERR_M_REQUIRES_MODE);
-                        return 0;
-                    }
-                    args->mode = argv[++i];
-                }
-                else if (strcmp(argv[i], "-pass") == 0) {
-                    if (i + 1 >= argc) {
-                        fprintf(stderr, ERR_PASS_REQUIRES_PASSWORD);
-                        return 0;
-                    }
-                    args->password = argv[++i];
-                }
-                else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                    args->help_requested = 1;
-                }
-                else {
-                    fprintf(stderr, ERR_UNKNOWN_OPTION, argv[i]);
-                    return 0;
-                }
-                break;
+    while ((opt = getopt_long(argc, argv, "EXi:p:o:s:a:m:P:h", long_opts, &long_index)) != -1) {
+        switch (opt) {
+            case 'E': args->embed_mode = 1; break;
+            case 'X': args->extract_mode = 1; break;
+            case 'i': args->input_file = optarg; break;
+            case 'p': args->bitmap_file = optarg; break;
+            case 'o': args->output_file = optarg; break;
+            case 's': args->steg_algorithm = optarg; break;
+            case 'a': args->encryption_algo = optarg; break;
+            case 'm': args->mode = optarg; break;
+            case 'P': args->password = optarg; break;
+            case 'h': args->help_requested = 1; print_usage(argv[0]); return 0;
             default:
-                fprintf(stderr, ERR_UNKNOWN_OPTION, argv[i]);
+                fprintf(stderr, "Error: opción desconocida o faltan argumentos.\n");
+                print_usage(argv[0]);
                 return 0;
         }
     }
-    
     return 1;
 }
 
@@ -129,8 +96,8 @@ int validate_arguments(const ProgramArgs *args) {
     }
     
     // Validate required parameters
-    if (!args->embed_mode) {
-        fprintf(stderr, ERR_EMBED_FLAG_REQUIRED);
+    if (!args->embed_mode && !args->extract_mode) {
+        fprintf(stderr, ERR_FLAG_REQUIRED);
         return 0;
     }
     
