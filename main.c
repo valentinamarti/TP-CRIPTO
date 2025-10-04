@@ -19,12 +19,12 @@ typedef struct {
 } ProgramArgs;
 
 // Function prototypes
-void print_usage(const char *program_name);
+void print_help(const char *program_name);
 int parse_arguments(int argc, char *argv[], ProgramArgs *args);
 int validate_arguments(const ProgramArgs *args);
 void free_arguments(ProgramArgs *args);
 
-void print_usage(const char *program_name) {
+void print_help(const char *program_name) {
     printf(
         "Usage: %s [OPTIONS]\n\n"
         "Required parameters:\n"
@@ -79,10 +79,10 @@ int parse_arguments(int argc, char *argv[], ProgramArgs *args) {
             case 'a': args->encryption_algo = optarg; break;
             case 'm': args->mode = optarg; break;
             case 'P': args->password = optarg; break;
-            case 'h': args->help_requested = 1; print_usage(argv[0]); return 0;
+            case 'h': args->help_requested = 1; print_help(argv[0]); return 0;
             default:
                 fprintf(stderr, "Error: opción desconocida o faltan argumentos.\n");
-                print_usage(argv[0]);
+                print_help(argv[0]);
                 return 0;
         }
     }
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
     
     // Show help if requested
     if (args.help_requested) {
-        print_usage(argv[0]);
+        print_help(argv[0]);
         return 0;
     }
     
