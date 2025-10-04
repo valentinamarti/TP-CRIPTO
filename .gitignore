@@ -1,0 +1,32 @@
+# Compilación de C
+*.o
+*.out
+*.exe
+*.a
+*.so
+
+# Ejecutables del proyecto
+TP_CRIPTO
+
+# Archivos de respaldo y temporales
+*~
+*.bak
+*.tmp
+*.swp
+*.swo
+
+# Archivos generados por el sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de log o debugging
+*.log
+core
+vgcore.*
+
+# Archivos del editor (VSCode, CLion, etc.)
+.vscode/
+.idea/
+
+# Archivos generados por make clean o distclean
+build/
