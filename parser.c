@@ -147,6 +147,38 @@ int validate_arguments(const ProgramArgs *args) {
     return 1;
 }
 
+void debug_arguments(const ProgramArgs *args) {
+    // Print parsed parameters for debugging
+    printf("Program parameters:\n");
+    printf("  Mode: %s\n", args->embed_mode ? "embed" : "extract");
+    printf("  Input file: %s\n", args->input_file);
+    printf("  Bitmap file: %s\n", args->bitmap_file);
+    printf("  Output file: %s\n", args->output_file);
+    printf("  Steganography algorithm: %s\n", args->steg_algorithm);
+
+    if (args->encryption_algo) {
+        printf("  Encryption algorithm: %s\n", args->encryption_algo);
+    }
+    if (args->mode) {
+        printf("  Mode: %s\n", args->mode);
+    }
+    if (args->password) {
+        printf("  Password: [HIDDEN]\n");
+    }
+
+    // TODO: Here you would implement the actual steganography logic
+    // For now, we just print that we would process the files
+    printf("\nProcessing files...\n");
+    printf("Would embed '%s' into '%s' using %s algorithm\n", 
+        args->input_file, args->bitmap_file, args->steg_algorithm);
+    printf("Output would be saved to '%s'\n", args->output_file);
+
+    if (args->encryption_algo) {
+        printf("Files would be encrypted using %s in %s mode\n", 
+            args->encryption_algo, args->mode ? args->mode : "default");
+}
+}
+
 void free_arguments(ProgramArgs *args) {
     // Note: We don't free strings since they point to argv, which is managed by the system
     memset(args, 0, sizeof(ProgramArgs));

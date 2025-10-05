@@ -19,6 +19,7 @@ typedef struct {
 void print_help(const char *program_name);
 int parse_arguments(int argc, char *argv[], ProgramArgs *args);
 int validate_arguments(const ProgramArgs *args);
+void debug_arguments(const ProgramArgs *args);
 void free_arguments(ProgramArgs *args);
 
 #endif // PARSER_H
