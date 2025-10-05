@@ -1,95 +1,121 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-    // BMP File Header
-typedef struct {        //14 bytes 
-    uint16_t bfType;      // Specifies the file type (BM)
-    uint32_t bfSize;      // Specifies the size of the file in bytes
-    uint16_t bfReserved1; // Reserved; must be 0
-    uint16_t bfReserved2; // Reserved; must be 0
-    uint32_t bfOffBits;   // Specifies the offset to the pixel data
-} __attribute__((packed)) BMPFileHeader; // Use packed attribute to prevent padding
-
-// BMP Info Header
-typedef struct {        //40 bytes 
-    uint32_t biSize;          // Specifies the size of the Info Header
-    int32_t  biWidth;         // Specifies the width of the image
-    int32_t  biHeight;        // Specifies the height of the image
-    uint16_t biPlanes;        // Must be 1
-    uint16_t biBitCount;      // Specifies the number of bits per pixel
-    uint32_t biCompression;   // Specifies the compression type
-    uint32_t biSizeImage;     // Specifies the size of the image data
-    int32_t  biXPelsPerMeter; // Horizontal resolution
-    int32_t  biYPelsPerMeter; // Vertical resolution
-    uint32_t biClrUsed;       // Number of colors in the palette
-    uint32_t biClrImportant;  // Number of important colors
-} __attribute__((packed)) BMPInfoHeader;
-
-typedef struct {
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-} Pixel;
-
-typedef struct {
-    BMPFileHeader * fileHeader;
-    BMPInfoHeader * infoHeader;
-    Pixel * data;
-    FILE * in;
-    FILE * out;
-} BMPImage;
-
-
-#define HEADER_SIZE 54
+#include "bmp_lib.h"
+#include "error.h"
 
 void recorrer_bmp(BMPImage *image,
     void (*callback)(Pixel *byte, void *ctx),
     void *ctx) {
 
+    if (!image || !image->in || !image->out) {
+        fprintf(stderr, ERR_INVALID_BMP);
+        return;
+    }
     
-    // Procesar cuerpo
+    // Process pixels
     Pixel pixel;
     while (fread(&pixel, sizeof(Pixel), 1, image->in) == 1) {
-        callback(&pixel, ctx);   // aplicar algoritmo elegido
-        fwrite(&pixel, sizeof(Pixel), 1, image->out);
+        callback(&pixel, ctx);   // apply chosen algorithm
+        if (fwrite(&pixel, sizeof(Pixel), 1, image->out) != 1) {
+            fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);
+            return;
+        }
     }
-
-    fclose(image->in);
-    fclose(image->out);
-    
 }
 
 BMPImage * start_bmp(const char *bmp_in){
     FILE *in = fopen(bmp_in, "rb");
     if (!in) {
-        perror("Error abriendo archivos BMP");
-        exit(1);
+        perror(ERR_FAILED_TO_OPEN_BMP);
+        return NULL;
     }
+
+    BMPImage *image = malloc(sizeof(BMPImage));
     // Copiar header intacto
     BMPFileHeader * fileHeader = malloc(sizeof(BMPFileHeader));
     BMPInfoHeader * infoHeader = malloc(sizeof(BMPInfoHeader));
-
-    fread(&fileHeader, sizeof(BMPFileHeader), 1, in);
-    fread(&infoHeader, sizeof(BMPInfoHeader), 1, in);
-
-    BMPImage *image = malloc(sizeof(BMPImage));
+    
     image->fileHeader = fileHeader;
     image->infoHeader = infoHeader;
     image->in = in;
+    image->out = NULL;
+    image->data = NULL;
+    
     return image;
 }
 
 BMPImage * end_bmp(BMPImage *image){
-    fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out);
-    fwrite(image->infoHeader, sizeof(BMPInfoHeader), 1, image->out);
-
-    Pixel pixel;
-    while(image->data != NULL){
-        pixel = image->data[0];
-        fwrite(&pixel, sizeof(Pixel), 1, image->out);
-        image->data+=sizeof(Pixel);
+    if (!image || !image->out) {
+        fprintf(stderr, "Invalid image or output file\n");
+        return NULL;
     }
-    fclose(image->out);
+    
+    // Write headers to output file
+    if (fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out) != 1) {
+        fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);
+        return NULL;
+    }
+    
+    if (fwrite(image->infoHeader, sizeof(BMPInfoHeader), 1, image->out) != 1) {
+        fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);
+        return NULL;
+    }
+
+    // Write pixel data if available
+    if (image->data) {
+        // Calculate number of pixels
+        int pixel_count = get_pixel_count(image);
+        if (pixel_count > 0) {
+            if (fwrite(image->data, sizeof(Pixel), pixel_count, image->out) != pixel_count) {
+                fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);
+                return NULL;
+            }
+        }
+    }
+    
+    if (fclose(image->out) != 0) {
+        fprintf(stderr, ERR_FAILED_TO_CLOSE_BMP);
+        return NULL;
+    }
+    
+    image->out = NULL;
     return image;
+}
+
+int get_pixel_count(BMPImage *image) {
+    if (!image || !image->infoHeader) {
+        return -1;
+    }
+    
+    return image->infoHeader->biWidth * image->infoHeader->biHeight;
+}
+
+void free_bmp_image(BMPImage *image) {
+    if (!image) return;
+    
+    if (image->fileHeader) {
+        free(image->fileHeader);
+        image->fileHeader = NULL;
+    }
+    
+    if (image->infoHeader) {
+        free(image->infoHeader);
+        image->infoHeader = NULL;
+    }
+    
+    if (image->data) {
+        free(image->data);
+        image->data = NULL;
+    }
+    
+    if (image->in) {
+        fclose(image->in);
+        image->in = NULL;
+    }
+    
+    if (image->out) {
+        fclose(image->out);
+        image->out = NULL;
+    }
+    
+    free(image);
 }

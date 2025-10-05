@@ -26,4 +26,12 @@
 #define ERR_FAILED_TO_PARSE_ARGS "Failed to parse arguments. Use -h for help.\n"
 #define ERR_INVALID_ARGS "Invalid arguments. Use -h for help.\n"
 
+
+// BMP error messages
+#define ERR_INVALID_BMP "Invalid BMP file\n"
+#define ERR_FAILED_TO_OPEN_BMP "Failed to open BMP file\n"
+#define ERR_FAILED_TO_READ_BMP "Failed to read BMP file\n"
+#define ERR_FAILED_TO_WRITE_BMP "Failed to write BMP file\n"
+#define ERR_FAILED_TO_CLOSE_BMP "Failed to close BMP file\n"
+
 #endif // ERROR_H
