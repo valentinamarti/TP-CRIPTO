@@ -9,13 +9,13 @@ LDFLAGS =
 TARGET = TP_CRIPTO
 
 # Source files
-SOURCES = main.c bmp_lib.c
+SOURCES = main.c bmp_lib.c parser.c
 
 # Object files (generated from source files)
 OBJECTS = $(SOURCES:.c=.o)
 
 # Header files
-HEADERS = bmp_lib.h
+HEADERS = bmp_lib.h parser.h error.h
 
 # Default target
 all: $(TARGET)
