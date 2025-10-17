@@ -13,6 +13,33 @@
 #define FALSE 0
 
 /**
+ * @brief Auxiliary structure to hold file size and extension details after I/O.
+ */
+typedef struct {
+    long file_size;       // Tamaño real del archivo en bytes (para el campo DWORD)
+    char *ext;            // Puntero a la extensión (ej: ".txt")
+    size_t ext_len;       // Longitud de la extensión incluyendo '.' y '\0'
+} SecretFileMetadata;
+
+/**
+ * @brief Reads the size and extension of the secret file.
+ *
+ * @param in_file Path to the secret file.
+ * @param metadata Pointer to the struct where results will be stored.
+ * @return FILE* pointer to the opened file (reset to SEEK_SET), or NULL on error.
+ */
+FILE *get_file_metadata(const char *in_file, SecretFileMetadata *metadata);
+
+/**
+ * @brief Writes the 4-byte file size into the buffer in Big Endian format.
+ * * This function performs the necessary Host Endian to Big Endian conversion.
+ *
+ * @param buffer Pointer to the destination buffer (must have at least 4 bytes allocated).
+ * @param file_size The real size of the file to be encoded.
+ */
+void write_size_header(unsigned char *buffer, long file_size);
+
+/**
  * @brief Utility function to check if the secret data fits in the carrier BMP.
  * * Compares the required bits (from buffer length) with the available capacity
  * based on the steganography algorithm's efficiency (bits_per_pixel).
