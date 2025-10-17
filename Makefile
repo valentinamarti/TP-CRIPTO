@@ -9,13 +9,13 @@ LDFLAGS =
 TARGET = TP_CRIPTO
 
 # Source files
-SOURCES = main.c bmp_lib.c parser.c
+SOURCES = main.c bmp_lib.c parser.c handlers.c steganography/steganography.c steganography/embed_utils.c
 
 # Object files (generated from source files)
 OBJECTS = $(SOURCES:.c=.o)
 
 # Header files
-HEADERS = bmp_lib.h parser.h error.h
+HEADERS = bmp_lib.h parser.h error.h handlers.h steganography/steganography.h steganography/embed_utils.h
 
 # Default target
 all: $(TARGET)
@@ -75,3 +75,7 @@ help:
 # Dependencies (optional - helps with incremental builds)
 main.o: main.c
 bmp_lib.o: bmp_lib.c
+parser.o: parser.c
+handlers.o: handlers.c
+steganography/steganography.o: steganography/steganography.c
+steganography/embed_utils.o: steganography/embed_utils.c
