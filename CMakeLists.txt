@@ -8,4 +8,5 @@ add_executable(TP_CRIPTO main.c
         parser.c
         steganography/steganography.h
         steganography/embed_utils.c
-        handlers.c)
+        handlers.c
+        steganography/steganography.c)
