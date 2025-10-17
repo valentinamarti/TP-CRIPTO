@@ -55,14 +55,14 @@ typedef struct {
  * @param bmp_in Path to the input BMP file
  * @return Pointer to initialized BMPImage structure, NULL on error
  */
-BMPImage * start_bmp(const char *bmp_in);
+BMPImage * open_bmp(const char *bmp_in);
 
 /**
  * @brief Closes a BMP file and writes the final output
  * @param image Pointer to BMPImage structure
  * @return Pointer to BMPImage structure, NULL on error
  */
-BMPImage * end_bmp(BMPImage *image);
+BMPImage * close_bmp(BMPImage *image);
 
 /**
  * @brief Processes a BMP file pixel by pixel using a callback function
@@ -70,7 +70,7 @@ BMPImage * end_bmp(BMPImage *image);
  * @param callback Function pointer to process each pixel
  * @param ctx Context pointer passed to callback function
  */
-void recorrer_bmp(BMPImage *image,
+void iterate_bmp(BMPImage *image,
     void (*callback)(Pixel *byte, void *ctx),
     void *ctx);
 
@@ -86,7 +86,7 @@ void free_bmp_image(BMPImage *image);
  * @param image Pointer to BMPImage structure
  * @return Number of pixels, -1 on error
  */
-int get_pixel_count(BMPImage *image);
+int get_pixel_count(const BMPImage *image);
 
 
 #endif // BMP_LIB_H

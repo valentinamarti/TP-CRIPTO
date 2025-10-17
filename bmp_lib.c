@@ -2,7 +2,7 @@
 #include "bmp_lib.h"
 #include "error.h"
 
-void recorrer_bmp(BMPImage *image,
+void iterate_bmp(BMPImage *image,
     void (*callback)(Pixel *byte, void *ctx),
     void *ctx) {
 
@@ -22,7 +22,7 @@ void recorrer_bmp(BMPImage *image,
     }
 }
 
-BMPImage * start_bmp(const char *bmp_in){
+BMPImage * open_bmp(const char *bmp_in){
     FILE *in = fopen(bmp_in, "rb");
     if (!in) {
         perror(ERR_FAILED_TO_OPEN_BMP);
@@ -43,7 +43,7 @@ BMPImage * start_bmp(const char *bmp_in){
     return image;
 }
 
-BMPImage * end_bmp(BMPImage *image){
+BMPImage * close_bmp(BMPImage *image){
     if (!image || !image->out) {
         fprintf(stderr, "Invalid image or output file\n");
         return NULL;
@@ -81,7 +81,7 @@ BMPImage * end_bmp(BMPImage *image){
     return image;
 }
 
-int get_pixel_count(BMPImage *image) {
+int get_pixel_count(const BMPImage *image) {
     if (!image || !image->infoHeader) {
         return -1;
     }

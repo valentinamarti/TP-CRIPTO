@@ -34,4 +34,8 @@
 #define ERR_FAILED_TO_WRITE_BMP "Failed to write BMP file\n"
 #define ERR_FAILED_TO_CLOSE_BMP "Failed to close BMP file\n"
 
+// VALIDATE FILES errors messages
+#define ERR_INSUFFICIENT_CAPACITY "Error: Carrier BMP capacity is insufficient.\n"
+
+
 #endif // ERROR_H

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "error.h"
 #include "parser.h"
-
+#include "handlers.h"
 
 
 int main(int argc, char *argv[]) {
@@ -27,9 +27,18 @@ int main(int argc, char *argv[]) {
     }
     
     // Debug arguments
-    debug_arguments(&args);
+    // debug_arguments(&args);
+
+    if (args.embed_mode) {
+        int result = handle_embed_mode(&args);
+    } else if (args.extract_mode) {
+        // result = handle_extract_mode(&args);
+        fprintf(stderr, "Extraction mode not yet implemented.\n");
+    }
+
     // Clean up
     free_arguments(&args);
     
     return 0;
 }
+
