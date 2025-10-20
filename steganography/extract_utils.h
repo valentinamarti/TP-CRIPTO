@@ -24,4 +24,13 @@ uint32_t read_size_header(unsigned char *buffer);
  */
  int extract_next_bit(BMPImage *image, int *bit_count, Pixel *current_pixel);
 
+ /**
+ * @brief Writes a secret from a buffer to a file.
+ * @param out_base_path The base path for the output file.
+ * @param buffer The buffer containing the secret.
+ * @param buffer_len The length of the buffer.
+ * @return 0 on success, 1 on error.
+ */
+ int write_secret_from_buffer(const char *out_base_path, unsigned char *buffer, size_t buffer_len);
+
 #endif
