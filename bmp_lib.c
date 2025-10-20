@@ -39,6 +39,47 @@ BMPImage * open_bmp(const char *bmp_in){
     image->in = in;
     image->out = NULL;
     image->data = NULL;
+
+    if (!image->fileHeader || !image->infoHeader) {
+        free_bmp_image(image); // Cleans up struct and closes file
+        return NULL;
+    }
+
+    // Read BMP File Header
+    if (fread(image->fileHeader, sizeof(BMPFileHeader), 1, image->in) != 1) {
+        fprintf(stderr, ERR_FAILED_TO_READ_BMP);
+        free_bmp_image(image);
+        return NULL;
+    }
+
+    // Read BMP Info Header
+    if (fread(image->infoHeader, sizeof(BMPInfoHeader), 1, image->in) != 1) {
+        fprintf(stderr, ERR_FAILED_TO_READ_BMP);
+        free_bmp_image(image);
+        return NULL;
+    }
+
+    // Validate BMP (Project Requirements)
+    if (image->fileHeader->bfType != 0x4D42) { // 'BM'
+        fprintf(stderr, ERR_INVALID_BMP " (Invalid signature)\n");
+        free_bmp_image(image);
+        return NULL;
+    }
+
+    if (image->infoHeader->biBitCount != 24) {
+        fprintf(stderr, ERR_INVALID_BMP " (Must be 24-bit)\n");
+        free_bmp_image(image);
+        return NULL;
+    }
+
+    if (image->infoHeader->biCompression != 0) {
+        fprintf(stderr, ERR_INVALID_BMP " (Must be uncompressed)\n");
+        free_bmp_image(image);
+        return NULL;
+    }
+
+    // Seek to pixel data
+    fseek(image->in, image->fileHeader->bfOffBits, SEEK_SET);
     
     return image;
 }
