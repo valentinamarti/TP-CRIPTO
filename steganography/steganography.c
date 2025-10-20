@@ -1,6 +1,8 @@
 #include "steganography.h"
 #include "../bmp_lib.h"
 #include "../error.h"
+#include "embed_utils.h"
+#include "extract_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,4 +84,70 @@ int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     }
 
     return EXIT_SUCCESS;
+}
+
+unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len) {
+    if (!image || !image->in) {
+        fprintf(stderr, ERR_INVALID_BMP);
+        return NULL;
+    }
+
+    unsigned char size_buffer[4] = {0};
+    Pixel current_pixel;
+    int bit_count = 0; // Tracks component (0=B, 1=G, 2=R)
+    int bit;
+
+    // --- Step 1: Extract 32-bit Size Header ---
+    for (int i = 0; i < 32; i++) {
+        bit = extract_next_bit(image, &bit_count, &current_pixel);
+        if (bit == -1) return NULL; // Read error
+
+        // Set the bit in the correct position in size_buffer
+        // We re-assemble LSB first (pos 0) to MSB first (pos 7)
+        int byte_idx = i / 8;
+        int bit_pos = i % 8;
+        if (bit) {
+            size_buffer[byte_idx] |= (1 << bit_pos);
+        }
+    }
+
+    // Convert Big Endian size buffer to a usable integer
+    int data_size = read_size_header(size_buffer);
+    
+    // Sanity check on the size
+    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
+    if (data_size == 0 || data_size > max_capacity_bytes) {
+        fprintf(stderr, "Error: Invalid or impossibly large data size extracted: %u\n", data_size);
+        return NULL;
+    }
+    
+    *extracted_data_len = (size_t)data_size;
+
+    // --- Step 2: Allocate memory for the secret data ---
+    unsigned char *data_buffer = malloc(data_size);
+    if (!data_buffer) {
+        fprintf(stderr, "Error: Failed to allocate memory for extracted data.\n");
+        return NULL;
+    }
+    memset(data_buffer, 0, data_size); // Initialize to zero
+
+    // --- Step 3: Extract the Data (data_size * 8 bits) ---
+    size_t total_bits_to_extract = (size_t)data_size * 8;
+    for (size_t i = 0; i < total_bits_to_extract; i++) {
+        bit = extract_next_bit(image, &bit_count, &current_pixel);
+        if (bit == -1) {
+            fprintf(stderr, "Error: Unexpected end of file during data extraction.\n");
+            free(data_buffer);
+            return NULL; // Read error
+        }
+
+        // Set the bit in the correct position in data_buffer
+        size_t byte_idx = i / 8;
+        size_t bit_pos = i % 8;
+        if (bit) {
+            data_buffer[byte_idx] |= (1 << bit_pos);
+        }
+    }
+
+    return data_buffer;
 }

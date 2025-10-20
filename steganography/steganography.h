@@ -43,4 +43,22 @@ int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
  */
 void lsb1_embed_pixel_callback(Pixel *pixel, void *ctx);
 
+
+/**
+ * @brief Extracts a secret buffer from a BMP image using LSB1.
+ *
+ * This function reads the BMP pixel data, extracts the LSB from each
+ * color component, and reconstructs the hidden data.
+ * It first extracts a 4-byte size header (Big Endian) to determine
+ * the full data length, then extracts the data itself.
+ *
+ * NOTE: The caller is responsible for freeing the returned buffer.
+ *
+ * @param image Pointer to an *opened* BMPImage structure (must have valid 'in' file).
+ * @param extracted_data_len Pointer to a size_t variable to store the length of the extracted data.
+ * @return A pointer to the dynamically allocated buffer containing the extracted data,
+ * or NULL on error (e.g., read error, allocation failure).
+ */
+ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len);
+
 #endif
