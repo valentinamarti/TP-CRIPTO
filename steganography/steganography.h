@@ -61,4 +61,28 @@ void lsb1_embed_pixel_callback(Pixel *pixel, void *ctx);
  */
  unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len);
 
+/**
+ * @brief Hides the pre-built secret buffer inside a BMP using the LSB4 algorithm.
+ *
+ * @param image Pointer to the initialized BMPImage structure (open by the caller)
+ * @param secret_buffer Pointer to the pre-built buffer containing the message
+ * @param buffer_len Total length of the secret_buffer in bytes
+ * @param out_file_path Path to the output file (used for writing the final stego-image)
+ * @return 0 on success, 1 on error.
+ */
+int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path);
+
+/**
+ * @brief Callback for LSB4: modifies a pixel by inserting 12 bits of the secret message.
+ *
+ * This function is designed to be passed to the BMP iteration function (iterate_bmp).
+ * It inserts four bits of secret data into the 4 Least Significant Bits (LSBs)
+ * of the Blue, Green, and Red components, sequentially.
+ *
+ * @param pixel Pointer to the pixel (BGR) to modify
+ * @param ctx Pointer to the context (StegoContext) holding the secret buffer and index.
+ */
+void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx);
+
+
 #endif

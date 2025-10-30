@@ -31,6 +31,9 @@ int main(int argc, char *argv[]) {
 
     if (args.embed_mode) {
         int result = handle_embed_mode(&args);
+        if (result == SUCCESS) {
+            printf("Success generating steganography\n");
+        }
     } else if (args.extract_mode) {
         // result = handle_extract_mode(&args);
         fprintf(stderr, "Extraction mode not yet implemented.\n");
