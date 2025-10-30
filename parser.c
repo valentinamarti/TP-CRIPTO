@@ -55,7 +55,7 @@ int parse_arguments(int argc, char *argv[], ProgramArgs *args) {
     int opt;
     int long_index = 0;
     
-    while ((opt = getopt_long(argc, argv, "EXi:p:o:s:a:m:P:h", long_opts, &long_index)) != -1) {
+    while ((opt = getopt_long_only(argc, argv, "W;EXi:p:o:s:a:m:P:h", long_opts, &long_index)) != -1) {
         switch (opt) {
             case 'E': args->embed_mode = 1; break;
             case 'X': args->extract_mode = 1; break;
