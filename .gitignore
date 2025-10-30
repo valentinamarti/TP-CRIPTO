@@ -5,8 +5,12 @@
 *.a
 *.so
 
+# Imagenes
+*.png
+
 # Ejecutables del proyecto
 TP_CRIPTO
+stegobmp
 
 # Archivos de respaldo y temporales
 *~

@@ -6,16 +6,16 @@ CFLAGS = -std=c11 -Wall -Wextra -g -O2
 LDFLAGS = 
 
 # Project name
-TARGET = TP_CRIPTO
+TARGET = stegobmp
 
 # Source files
-SOURCES = main.c bmp_lib.c parser.c handlers.c steganography/steganography.c steganography/embed_utils.c
+SOURCES = main.c bmp_lib.c parser.c handlers.c steganography/steganography.c steganography/embed_utils.c steganography/extract_utils.c
 
 # Object files (generated from source files)
 OBJECTS = $(SOURCES:.c=.o)
 
 # Header files
-HEADERS = bmp_lib.h parser.h error.h handlers.h steganography/steganography.h steganography/embed_utils.h
+HEADERS = bmp_lib.h parser.h error.h handlers.h steganography/steganography.h steganography/embed_utils.h steganography/extract_utils.h
 
 # Default target
 all: $(TARGET)
