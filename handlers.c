@@ -43,7 +43,7 @@ int handle_embed_mode(const ProgramArgs *args) {
         goto cleanup;
     }
 
-    if (check_bmp_capacity(image, required_bits, bits_per_pixel) != 0) {
+    if (check_bmp_capacity(image, required_bits, bits_per_pixel) != TRUE) {
         goto cleanup;
     }
 
@@ -56,6 +56,7 @@ int handle_embed_mode(const ProgramArgs *args) {
 
     if (strcmp(args->steg_algorithm, "LSB1") == 0) {
         if (embed_lsb1(image, secret_buffer, buffer_len_bytes, args->output_file) == 0) {
+            printf("success");
             result = SUCCESS;
         }
     } else if(strcmp(args->steg_algorithm, "LSB4") == 0) {

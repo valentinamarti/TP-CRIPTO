@@ -52,7 +52,7 @@ unsigned char *build_secret_buffer(const char *in_file, size_t *required_buffer_
     total_len = sizeof(uint32_t) + (size_t)metadata.file_size + metadata.ext_len;
     *required_buffer_len = total_len;
 
-    data_buffer = (unsigned char *)malloc(total_len);
+    data_buffer = (unsigned char *)calloc(1, total_len);
     if (!data_buffer) {
         fprintf(stderr, "Error: Failed to allocate memory for the secret buffer.\n");
         fclose(secret_fp);
@@ -90,12 +90,12 @@ int check_bmp_capacity(const BMPImage *image, size_t required_data_bits, int bit
 
     if (required_data_bits > capacity_bits) {
         fprintf(stderr, ERR_INSUFFICIENT_CAPACITY);
+        fprintf(stderr, "Capacity: %zu bits. Required: %zu bits.\n", capacity_bits, required_data_bits);
         return FALSE;
     }
 
     return TRUE;
 }
-
 
 void free_secret_buffer(unsigned char *buffer) {
     if (buffer) {
