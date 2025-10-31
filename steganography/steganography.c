@@ -1,5 +1,4 @@
 #include "steganography.h"
-#include "../bmp_lib.h"
 #include "../error.h"
 #include "embed_utils.h"
 #include "extract_utils.h"
@@ -19,13 +18,116 @@ static int get_nth_bit(const unsigned char *data_buffer, size_t n) {
     size_t byte_idx = n / 8;
     size_t bit_pos = n % 8;
 
-    if (byte_idx >= 0) {
-        return (data_buffer[byte_idx] >> bit_pos) & 1;
+    return (data_buffer[byte_idx] >> bit_pos) & 1;
+}
+
+/**
+ * @brief Loads the usable color components (Blue and Green) from the carrier BMP into memory.
+ *
+ * This function performs the necessary file reading (LSBI Phase 1) to extract only the
+ * Blue and Green bytes from the image data, ignoring the Red channel, and stores them in
+ * a contiguous memory array. This array is used by the analysis function
+ * (lsbi_analyze_and_generate_map) to dynamically determine the inversion map.
+ *
+ * NOTE: The caller is responsible for freeing the memory allocated to *comp_data.
+ *
+ * @param image Pointer to the initialized BMPImage structure.
+ * @param comp_data Pointer to a memory location that will store the address of the
+ * dynamically allocated array (B, G, B, G, ...) upon success.
+ * @param count Pointer to a size_t variable that will store the total number of components loaded (2 * pixel_count).
+ * @return 0 on success, EXIT_FAILURE on error (I/O or memory allocation).
+ */
+int lsbi_load_bg_components(const BMPImage *image, unsigned char **comp_data, size_t *count) {
+    int pixel_count = get_pixel_count(image);
+    if (pixel_count <= 0) {
+        fprintf(stderr, "Error: Invalid BMP dimensions for analysis.\n");
+        return EXIT_FAILURE;
+    }
+
+    size_t required_bytes = (size_t)pixel_count * 2;
+    *comp_data = (unsigned char *)malloc(required_bytes);
+    if (!(*comp_data)) {
+        fprintf(stderr, "Error: Failed to allocate memory for LSBI analysis data.\n");
+        return EXIT_FAILURE;
+    }
+
+    *count = required_bytes;
+    if (fseek(image->in, image->fileHeader->bfOffBits, SEEK_SET) != 0) {
+        fprintf(stderr, "Error: Failed to reset BMP file pointer.\n");
+        free(*comp_data);
+        return EXIT_FAILURE;
+    }
+
+    unsigned char pixel_bytes[3];
+    size_t current_comp_index = 0;
+
+    for (int i = 0; i < pixel_count; i++) {
+        if (fread(pixel_bytes, 1, 3, image->in) != 3) {
+            fprintf(stderr, "Error: Unexpected end of file during component loading.\n");
+            free(*comp_data);
+            return EXIT_FAILURE;
+        }
+
+        (*comp_data)[current_comp_index++] = pixel_bytes[0];
+        (*comp_data)[current_comp_index++] = pixel_bytes[1];
     }
 
     return EXIT_SUCCESS;
 }
 
+/**
+ * @brief Simulates the insertion process to generate the inversion map based on change minimization.
+ *
+ * This function performs the necessary analysis (LSBI Phase 1) to determine the optimal
+ * inversion rule for each of the four possible 2-bit patterns (00, 01, 10, 11).
+ * It counts the total modifications that would occur with and without LSB inversion for each pattern.
+ *
+ * @param secret_buffer The complete secret payload (Size | Data | Ext) to be hidden.
+ * @param buffer_len Length in bytes of the payload.
+ * @param bmp_comp_data Array of all usable Blue and Green component bytes from the carrier BMP (must be pre-loaded).
+ * @param total_comp_count Total number of usable Blue/Green components available in the array.
+ * @return The 4-bit inversion map (unsigned char), where a '1' at bit 'p' means Pattern 'p' must be inverted during embedding.
+ */
+unsigned char lsbi_analyze_and_generate_map(const unsigned char *secret_buffer, size_t buffer_len, const unsigned char *bmp_comp_data, size_t total_comp_count) {
+    LSBIChangeCounts counts;
+    for (int i = 0; i < LSBI_PATTERNS; i++) {
+        counts.count_normal[i] = 0;
+        counts.count_inverted[i] = 0;
+    }
+
+    unsigned char inversion_map = 0;
+    const size_t total_secret_bits = buffer_len * 8;
+    size_t limit = (total_secret_bits > total_comp_count) ? total_comp_count : total_secret_bits;
+
+    for (size_t comp_idx = 0; comp_idx < limit; comp_idx++) {
+
+        unsigned char original_value = bmp_comp_data[comp_idx];
+        unsigned char pattern = (original_value >> 1) & 0x03;
+        int secret_bit = get_nth_bit(secret_buffer, comp_idx);
+
+
+        unsigned char normal_stego = (original_value & 0xFE) | secret_bit;
+        unsigned char inverted_stego = normal_stego ^ 0x01;
+
+
+        if (normal_stego != original_value) {
+            counts.count_normal[pattern]++;
+        }
+        if (inverted_stego != original_value) {
+            counts.count_inverted[pattern]++;
+        }
+    }
+
+    for (int p = 0; p < LSBI_PATTERNS; p++) {
+        if (counts.count_inverted[p] <= counts.count_normal[p]) {
+            inversion_map |= (1 << p);
+        }
+    }
+
+    return inversion_map;
+}
+
+// -------------------------------------- LSB1 --------------------------------------
 /**
  * @brief Callback for LSB1: modifies a pixel by inserting 3 bits of the secret message.
  * * Inserts one bit into the LSB of Blue, then Green, then Red (BGR order).
@@ -63,7 +165,8 @@ int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     StegoContext ctx = {
             .data_buffer = (unsigned char *)secret_buffer,
             .data_buffer_len = buffer_len,
-            .current_bit_idx = 0
+            .current_bit_idx = 0,
+            .inversion_map = 0
     };
 
     if (fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out) != 1 ||
@@ -151,6 +254,7 @@ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len) {
     return data_buffer;
 }
 
+// -------------------------------------- LSB4 --------------------------------------
 /**
  * @brief Callback for LSB4: modifies a pixel by inserting 12 bits of the secret message.
  * * Inserts one bit into the LSB of Blue, then Green, then Red (BGR order).
@@ -197,7 +301,8 @@ int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     StegoContext ctx = {
             .data_buffer = (unsigned char *)secret_buffer,
             .data_buffer_len = buffer_len,
-            .current_bit_idx = 0
+            .current_bit_idx = 0,
+            .inversion_map = 0
     };
 
     if (fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out) != 1 ||
@@ -209,6 +314,126 @@ int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     iterate_bmp(image, lsb4_embed_pixel_callback, &ctx);
 
     size_t required_bits = buffer_len * 8;
+    if (ctx.current_bit_idx < required_bits) {
+        fprintf(stderr, "Warning: Steganography process finished prematurely. %zu bits of %zu were written.\n", ctx.current_bit_idx, required_bits);
+    }
+
+    return EXIT_SUCCESS;
+}
+
+
+// -------------------------------------- LSBI --------------------------------------
+void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx) {
+    StegoContext *stego_ctx = (StegoContext *)ctx;
+
+    const size_t control_limit = 4;
+    const size_t total_bits_with_overhead = (stego_ctx->data_buffer_len * 8) + control_limit;
+
+    if (stego_ctx->current_bit_idx >= total_bits_with_overhead) {
+        return;
+    }
+
+    unsigned char *components[3] = {&(pixel->blue), &(pixel->green), &(pixel->red)};
+
+    for (int i = 0; i < 3; i++) {
+        if (stego_ctx->current_bit_idx >= total_bits_with_overhead) {
+            return;
+        }
+
+        // ==========================================================
+        // FASE 1: CONTROL (Bits 0-3)
+        // ==========================================================
+        if (stego_ctx->current_bit_idx < control_limit) {
+
+            // 1. Extraer Bit de Control: Lee el bit de la inversion_map (0 o 1)
+            int control_bit = (stego_ctx->inversion_map >> stego_ctx->current_bit_idx) & 1;
+
+            // 2. Inserción LSB1 Normal (Limpia LSB con 0xFE, inserta el bit)
+            *components[i] &= 0xFE;
+            *components[i] |= control_bit;
+
+            // 3. Avance de índice y pasar al siguiente componente/píxel
+            stego_ctx->current_bit_idx++;
+            continue;
+        }
+
+        // ==========================================================
+        // FASE 2: DATOS (Bit 4 en adelante)
+        // ==========================================================
+
+        // a) Regla LSBI: Ignorar Canal Red (i=2)
+        // El LSBI original usa solo Blue y Green como portadores de datos.
+        if (i == 2) {
+            continue;
+        }
+
+        // b) Obtener Bit Secreto (del payload real)
+        // Restamos el overhead (4 bits) al índice total para apuntar al buffer del payload.
+        size_t data_bit_idx = stego_ctx->current_bit_idx - control_limit;
+        int bit_to_insert = get_nth_bit(stego_ctx->data_buffer, data_bit_idx);
+
+        // c) Obtener Patrón Original (Patrón P)
+        // Guardamos el valor original y aislamos los Bits 1 y 2 para el patrón (00, 01, 10, 11)
+        unsigned char original_value = *components[i];
+        unsigned char pattern = (original_value >> 1) & 0x03; // Extrae bits 1 y 2
+
+        // d) Aplicar LSB1 Inicial (El 'stego-pixel' inicial)
+        *components[i] &= 0xFE;
+        *components[i] |= bit_to_insert;
+
+        // e) Lógica de Inversión Condicional (LSBI)
+        // Verificamos si el bit en la 'inversion_map' (1010) correspondiente a 'pattern' es 1.
+        unsigned char inversion_flag = (stego_ctx->inversion_map >> pattern) & 1;
+
+        if (inversion_flag) {
+            // Si el flag es 1, invertimos el LSB final con XOR 0x01
+            *components[i] ^= 0x01;
+        }
+
+        // f) Avance de índice (solo si se insertó un bit de datos)
+        stego_ctx->current_bit_idx++;
+    }
+}
+
+int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path) {
+    unsigned char *bmp_comp_data = NULL; // Componentes B y G cargados
+    size_t total_comp_count = 0;         // Cantidad de componentes B y G cargados
+    unsigned char calculated_map = 0;
+
+    if (lsbi_load_bg_components(image, &bmp_comp_data, &total_comp_count) != 0) {
+        return EXIT_FAILURE;
+    }
+
+    calculated_map = lsbi_analyze_and_generate_map(
+            secret_buffer,
+            buffer_len,
+            bmp_comp_data,
+            total_comp_count
+    );
+
+    free(bmp_comp_data);
+
+    StegoContext ctx = {
+            .data_buffer = (unsigned char *)secret_buffer,
+            .data_buffer_len = buffer_len,
+            .current_bit_idx = 0,
+            .inversion_map = calculated_map
+    };
+
+    if (fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out) != 1 ||
+        fwrite(image->infoHeader, sizeof(BMPInfoHeader), 1, image->out) != 1) {
+        fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);
+        return EXIT_FAILURE;
+    }
+
+    if (fseek(image->in, image->fileHeader->bfOffBits, SEEK_SET) != 0) {
+        fprintf(stderr, "Error: Failed to reset BMP file pointer for insertion.\n");
+        return EXIT_FAILURE;
+    }
+
+    iterate_bmp(image, lsbi_embed_pixel_callback, &ctx);
+
+    size_t required_bits = (buffer_len * 8) + 4;
     if (ctx.current_bit_idx < required_bits) {
         fprintf(stderr, "Warning: Steganography process finished prematurely. %zu bits of %zu were written.\n", ctx.current_bit_idx, required_bits);
     }

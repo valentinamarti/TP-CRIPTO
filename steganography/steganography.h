@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include "../bmp_lib.h"
 
+#define LSBI_PATTERNS 4 // 00, 01, 10, 11
+#define LSBI_OVERHEAD 4 // 4 bits de control
+
 
 /**
  * @brief Steganography context structure.
@@ -16,8 +19,14 @@ typedef struct {
     unsigned char *data_buffer;     // Complete buffer: [Size 4B] | [Data...] | [Ext. \0]
     size_t data_buffer_len;         // Total length of the buffer in bytes
     size_t current_bit_idx;         // Index of the current bit being inserted (0-based)
+
+    unsigned char inversion_map;    // Mapa de inversion (para patrones 00, 01, 10, 11)
 } StegoContext;
 
+typedef struct {
+    long count_normal[LSBI_PATTERNS];
+    long count_inverted[LSBI_PATTERNS];
+} LSBIChangeCounts;
 
 /**
  * @brief Hides the pre-built secret buffer inside a BMP using the LSB1 algorithm.
@@ -84,5 +93,26 @@ int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
  */
 void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx);
 
+/**
+ * @brief Hides the pre-built secret buffer inside a BMP using the LSBI (Improved) algorithm.
+ *
+ * @param image Pointer to the initialized BMPImage structure (open by the caller)
+ * @param secret_buffer Pointer to the pre-built buffer containing the message
+ * @param buffer_len Total length of the secret_buffer in bytes (excluding LSBI control bits)
+ * @param out_file_path Path to the output file (used for writing the final stego-image)
+ * @return 0 on success, 1 on error.
+ */
+int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path);
+
+/**
+ * @brief Callback for LSBI: modifies a pixel component based on a bit inversion strategy.
+ *
+ * This function inserts one bit of secret data into the LSB of a component, applying
+ * the bit-inverse rule based on the 2nd and 3rd LSBs of the *cover* component to minimize changes.
+ *
+ * @param pixel Pointer to the pixel (BGR) to modify
+ * @param ctx Pointer to the context (StegoContext) holding the secret buffer and index.
+ */
+void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx);
 
 #endif

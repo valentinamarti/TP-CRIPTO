@@ -59,8 +59,14 @@ int handle_embed_mode(const ProgramArgs *args) {
             result = SUCCESS;
         }
     } else if(strcmp(args->steg_algorithm, "LSB4") == 0) {
+        if (embed_lsb4(image, secret_buffer, buffer_len_bytes, args->output_file) == 0) {
+            result = SUCCESS;
+        }
         return SUCCESS;
     } else if (strcmp(args->steg_algorithm, "LSBI") == 0) {
+        if (embed_lsbi(image, secret_buffer, buffer_len_bytes, args->output_file) == 0) {
+            result = SUCCESS;
+        }
         return SUCCESS;
     }
 
