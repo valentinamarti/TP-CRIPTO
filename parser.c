@@ -143,8 +143,8 @@ int validate_arguments(const ProgramArgs *args) {
     }
     
     // Check if password is provided when encryption is specified
-    if (args->encryption_algo && !args->password) {
-        fprintf(stderr, ERR_PASSWORD_REQUIRED_FOR_ENCRYPTION);
+    if ((args->encryption_algo || args->mode) && !args->password) {
+        fprintf(stderr, "Error: Password (-pass) is required when specifying an algorithm (-a) or mode (-m).\n");
         return 0;
     }
     

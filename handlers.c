@@ -71,12 +71,10 @@ int handle_embed_mode(const ProgramArgs *args) {
         if (embed_lsb4(image, secret_buffer, buffer_len_bytes) == 0) {
             result = SUCCESS;
         }
-        return SUCCESS;
     } else if (strcmp(args->steg_algorithm, "LSBI") == 0) {
         if (embed_lsbi(image, secret_buffer, buffer_len_bytes) == 0) {
             result = SUCCESS;
         }
-        return SUCCESS;
     }
 
 

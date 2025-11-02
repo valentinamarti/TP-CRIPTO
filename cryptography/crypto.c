@@ -40,13 +40,13 @@ const EVP_CIPHER *get_evp_cipher(const char *algo, const char *mode) {
 int derive_key_iv_pbkdf2(const char *password, const EVP_CIPHER *cipher, unsigned char *key_iv_buffer) {
     int key_len = EVP_CIPHER_key_length(cipher); // library functions
     int iv_len = EVP_CIPHER_iv_length(cipher);
-    int total_len = key_len + iv_len; //
+    int total_len = key_len + iv_len;
 
     // PKCS5_PBKDF2_HMAC (SHA-1 por defecto)
     if (PKCS5_PBKDF2_HMAC(password, strlen(password),
-                          (const unsigned char *)FIXED_SALT, strlen(FIXED_SALT),
+                          FIXED_SALT, FIXED_SALT_LEN,
                           10000, // iterations
-                          EVP_sha256(), // hash
+                          EVP_sha1(), // hash function
                           total_len, key_iv_buffer) == 0) {
         fprintf(stderr, "Error: Falló la derivación de clave PBKDF2.\n");
         return -1;

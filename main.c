@@ -7,6 +7,7 @@
 
 int main(int argc, char *argv[]) {
     ProgramArgs args;
+    int exit_code = 0;
     
     // Parse command line arguments
     if (!parse_arguments(argc, argv, &args)) {
@@ -33,11 +34,15 @@ int main(int argc, char *argv[]) {
         int result = handle_embed_mode(&args);
         if (result == SUCCESS) {
             printf("Success generating steganography\n");
+        } else {
+            fprintf(stderr, "Embedding failed.\n");
+            exit_code = 1;
         }
     } else if (args.extract_mode) {
         int result = handle_extract_mode(&args);
         if (result != SUCCESS) {
             fprintf(stderr, "Extraction failed.\n");
+            exit_code = 1;
         } else {
             fprintf(stderr, "Extraction completed successfully.\n");
         }
@@ -46,6 +51,6 @@ int main(int argc, char *argv[]) {
     // Clean up
     free_arguments(&args);
     
-    return 0;
+    return exit_code;
 }
 

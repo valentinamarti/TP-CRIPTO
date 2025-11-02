@@ -5,7 +5,9 @@
 #include <stddef.h>
 
 // fixed salt as instructed
-#define FIXED_SALT "0000000000000000"
+// fixed salt as instructed (8 bytes of 0x00)
+static const unsigned char FIXED_SALT[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+#define FIXED_SALT_LEN 8
 #define KEY_IV_LEN 64 // Key + IV
 
 /**
