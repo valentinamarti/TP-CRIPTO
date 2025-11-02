@@ -16,6 +16,10 @@ Para instalar las dependencias en Ubuntu/WSL:
 sudo apt update
 sudo apt install build-essential libssl-dev
 ```
+Para instalar las dependencias en MacOs:
+```bash
+brew install openssl@3
+```
 
 ## 2. Cómo Compilar el Proyecto
 

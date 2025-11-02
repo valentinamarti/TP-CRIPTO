@@ -1,9 +1,22 @@
 # Makefile for TP_CRIPTO project
 
+UNAME_S := $(shell uname -s)
+
+OPENSSL_INC_PATH = /opt/homebrew/opt/openssl@3/include
+OPENSSL_LIB_PATH = /opt/homebrew/opt/openssl@3/lib
+
 # Compiler and flags
 CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -g -O2
-LDFLAGS = -l crypto
+LDFLAGS =
+
+ifeq ($(UNAME_S),Darwin)
+    CFLAGS += -I$(OPENSSL_INC_PATH)
+    LDFLAGS += -L$(OPENSSL_LIB_PATH)
+    LDFLAGS += -l crypto
+else
+    LDFLAGS += -l crypto
+endif
 
 # Project name
 TARGET = stegobmp
