@@ -35,10 +35,9 @@ typedef struct {
  * @param image Pointer to the initialized BMPImage structure (open by the caller)
  * @param secret_buffer Pointer to the pre-built buffer containing the message
  * @param buffer_len Total length of the secret_buffer in bytes
- * @param out_file_path Path to the output file (used for writing the final stego-image)
  * @return 0 on success, 1 on error.
  */
-int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path);
+int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len);
 
 /**
  * @brief Callback for LSB1: modifies a pixel by inserting 3 bits of the secret message
@@ -76,10 +75,9 @@ void lsb1_embed_pixel_callback(Pixel *pixel, void *ctx);
  * @param image Pointer to the initialized BMPImage structure (open by the caller)
  * @param secret_buffer Pointer to the pre-built buffer containing the message
  * @param buffer_len Total length of the secret_buffer in bytes
- * @param out_file_path Path to the output file (used for writing the final stego-image)
  * @return 0 on success, 1 on error.
  */
-int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path);
+int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len);
 
 /**
  * @brief Callback for LSB4: modifies a pixel by inserting 12 bits of the secret message.
@@ -99,10 +97,9 @@ void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx);
  * @param image Pointer to the initialized BMPImage structure (open by the caller)
  * @param secret_buffer Pointer to the pre-built buffer containing the message
  * @param buffer_len Total length of the secret_buffer in bytes (excluding LSBI control bits)
- * @param out_file_path Path to the output file (used for writing the final stego-image)
  * @return 0 on success, 1 on error.
  */
-int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path);
+int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len);
 
 /**
  * @brief Callback for LSBI: modifies a pixel component based on a bit inversion strategy.

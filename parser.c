@@ -29,7 +29,7 @@ void print_help(const char *program_name) {
         "Example:\n"
         "  %s -embed -in secret.txt -p image.bmp -out stego.bmp -steg LSB1\n"
         "  %s -extract -p stego.bmp -out secret.txt -steg LSB1\n",
-        program_name, program_name
+        program_name, program_name, program_name
     );
     
 }
@@ -88,11 +88,15 @@ int validate_arguments(const ProgramArgs *args) {
         return 0;
     }
     
-    if (!args->input_file) {
-        fprintf(stderr, ERR_IN_PARAMETER_REQUIRED);
-        return 0;
+    // Validate parameters based on mode
+    if (args->embed_mode) {
+        // -in is required ONLY for embedding
+        if (!args->input_file) {
+            fprintf(stderr, ERR_IN_PARAMETER_REQUIRED);
+            return 0;
+        }
     }
-    
+
     if (!args->bitmap_file) {
         fprintf(stderr, ERR_P_PARAMETER_REQUIRED);
         return 0;

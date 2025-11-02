@@ -16,4 +16,8 @@
 
 int handle_embed_mode(const ProgramArgs *args);
 
+int prepare_encryption(const ProgramArgs *args, unsigned char **secret_buffer_ptr, size_t *buffer_len_bytes_ptr);
+
+int handle_extract_mode(const ProgramArgs *args);
+
 #endif //HANDLERS_H

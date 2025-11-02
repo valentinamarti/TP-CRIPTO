@@ -35,8 +35,12 @@ int main(int argc, char *argv[]) {
             printf("Success generating steganography\n");
         }
     } else if (args.extract_mode) {
-        // result = handle_extract_mode(&args);
-        fprintf(stderr, "Extraction mode not yet implemented.\n");
+        int result = handle_extract_mode(&args);
+        if (result != SUCCESS) {
+            fprintf(stderr, "Extraction failed.\n");
+        } else {
+            fprintf(stderr, "Extraction completed successfully.\n");
+        }
     }
 
     // Clean up

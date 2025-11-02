@@ -34,3 +34,7 @@ vgcore.*
 
 # Archivos generados por make clean o distclean
 build/
+
+# Archivos de cátedra
+ejemplos/
+ejemplossinenc/

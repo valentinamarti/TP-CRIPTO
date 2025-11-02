@@ -104,7 +104,7 @@ BMPImage * close_bmp(BMPImage *image){
     // Write pixel data if available
     if (image->data) {
         // Calculate number of pixels
-        int pixel_count = get_pixel_count(image);
+        size_t pixel_count = get_pixel_count(image);
         if (pixel_count > 0) {
             if (fwrite(image->data, sizeof(Pixel), pixel_count, image->out) != pixel_count) {
                 fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);

@@ -3,19 +3,18 @@
 # Compiler and flags
 CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -g -O2
-LDFLAGS = 
+LDFLAGS = -l crypto
 
 # Project name
 TARGET = stegobmp
 
 # Source files
-SOURCES = main.c bmp_lib.c parser.c handlers.c steganography/steganography.c steganography/embed_utils.c steganography/extract_utils.c
+SOURCES = $(wildcard *.c) \
+       $(wildcard cryptography/*.c) \
+       $(wildcard steganography/*.c)
 
 # Object files (generated from source files)
 OBJECTS = $(SOURCES:.c=.o)
-
-# Header files
-HEADERS = bmp_lib.h parser.h error.h handlers.h steganography/steganography.h steganography/embed_utils.h steganography/extract_utils.h
 
 # Default target
 all: $(TARGET)
@@ -25,7 +24,7 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
 # Compile source files to object files
-%.o: %.c $(HEADERS)
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean build artifacts

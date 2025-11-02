@@ -161,7 +161,7 @@ void lsb1_embed_pixel_callback(Pixel *pixel, void *ctx) {
 }
 
 
-int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path) {
+int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len) {
     StegoContext ctx = {
             .data_buffer = (unsigned char *)secret_buffer,
             .data_buffer_len = buffer_len,
@@ -214,7 +214,7 @@ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len) {
     }
 
     // Convert Big Endian size buffer to a usable integer
-    int data_size = read_size_header(size_buffer);
+    uint32_t data_size = read_size_header(size_buffer);
     
     // Sanity check on the size
     long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
@@ -297,7 +297,7 @@ void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx) {
 }
 
 
-int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path) {
+int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len) {
     StegoContext ctx = {
             .data_buffer = (unsigned char *)secret_buffer,
             .data_buffer_len = buffer_len,
@@ -395,7 +395,7 @@ void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx) {
     }
 }
 
-int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, const char *out_file_path) {
+int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len) {
     unsigned char *bmp_comp_data = NULL; // Componentes B y G cargados
     size_t total_comp_count = 0;         // Cantidad de componentes B y G cargados
     unsigned char calculated_map = 0;
