@@ -5,6 +5,7 @@
 *.a
 *.so
 *.txt
+*.bmp
 
 # Imagenes
 *.png
