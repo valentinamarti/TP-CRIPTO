@@ -15,20 +15,32 @@ uint32_t read_size_header(unsigned char *buffer) {
 }
 
 
-int extract_next_bit(BMPImage *image, int *bit_count, Pixel *current_pixel) {
+int extract_next_bit(BMPImage *image, int *bit_count, Pixel *current_pixel, int padding) {
     int bit = 0;
     unsigned char *component;
 
     // Determine which component (B, G, R) to read from
     int component_idx = (*bit_count) % 3;
-
+    static int current_x = 0; 
+    static int width = -1;
+    if (width == -1) width = image->infoHeader->biWidth;
     // Read a new pixel if we've used all 3 components of the current one
     if (component_idx == 0) {
         if (fread(current_pixel, sizeof(Pixel), 1, image->in) != 1) {
-            // Note: This might just be EOF, not necessarily a hard error
-            // if the data size was calculated perfectly.
+            
             fprintf(stderr, "Error: Failed to read pixel data during extraction.\n");
             return -1; // Read error
+        }
+
+        if (current_x == width) {
+            // We read the last pixel, now we must skip padding
+            if (padding > 0) {
+                unsigned char padding_bytes[3];
+                if (fread(padding_bytes, 1, padding, image->in) != (size_t)padding) {
+                    return -1; // Error skipping padding
+                }
+            }
+            current_x = 0; // Reset for next row
         }
     }
 

@@ -22,7 +22,7 @@ uint32_t read_size_header(unsigned char *buffer);
  * @param current_pixel A pointer to the current pixel being read.
  * @return The extracted bit (0 or 1), or -1 on read error.
  */
- int extract_next_bit(BMPImage *image, int *bit_count, Pixel *current_pixel);
+ int extract_next_bit(BMPImage *image, int *bit_count, Pixel *current_pixel, int padding);
 
  /**
  * @brief Writes a secret from a buffer to a file.

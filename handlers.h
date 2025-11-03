@@ -2,7 +2,7 @@
 #define HANDLERS_H
 
 #include "parser.h" // For ProgramArgs
-
+#include <stddef.h> // For size_t
 /**
  * @brief Handles the entire embedding process, from file preparation to execution.
  * * This function performs file I/O, resource management (BMPImage, secret_buffer),
