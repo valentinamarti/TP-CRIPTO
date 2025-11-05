@@ -44,37 +44,24 @@ int extract_next_bit(BMPImage *image, int *bit_count, Pixel *current_pixel) {
 }
 
 int write_secret_from_buffer(const char *out_base_path, unsigned char *buffer, size_t buffer_len, size_t extension_len) {
-    if (buffer_len < 4) {
-        fprintf(stderr, "Error: Extracted buffer is too small for size header.\n");
-        return 1;
-    }
-
-
-    // 2. Define data and extension pointers
     const unsigned char *data_ptr = buffer;
     const unsigned char *ext_ptr = data_ptr + buffer_len;
 
-    // 4. Construct full output path
     size_t base_len = strlen(out_base_path);
-    char *full_out_path = malloc(base_len + extension_len + 1); // +1 for null terminator
+    char *full_out_path = malloc(base_len + extension_len + 1);
     if (!full_out_path) {
         fprintf(stderr, "Error: Failed to allocate memory for output path.\n");
         return 1;
     }
     memcpy(full_out_path, out_base_path, base_len);
-    memcpy(full_out_path + base_len, ext_ptr, extension_len); // ext_len includes the '\0'
+    memcpy(full_out_path + base_len, ext_ptr, extension_len);
 
-    // 5. Write the file
     FILE *out_fp = fopen(full_out_path, "wb");
     if (!out_fp) {
         perror(full_out_path);
         free(full_out_path);
         return 1;
     }
-
-    // unsigned char * file_size = malloc(sizeof(uint32_t));
-    // write_size_header(file_size,buffer_len);
-    // fwrite(file_size,1,sizeof(uint32_t),out_fp);
 
     if (fwrite(data_ptr, 1, buffer_len, out_fp) != buffer_len) {
         fprintf(stderr, "Error: Failed to write all data to output file.\n");

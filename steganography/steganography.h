@@ -24,12 +24,18 @@ typedef struct {
 } StegoContext;
 
 typedef struct {
+    int changed_count;
+    int unchanged_count;
+} PatternStats;
+
+typedef struct {
     int bit_count;
     Pixel current_pixel;
     unsigned char inversion_map;
 } ExtractionContext;
 
 typedef int (*get_next_byte_func_t)(BMPImage *, ExtractionContext *);
+
 
 /**
  * @brief Hides the pre-built secret buffer inside a BMP using the LSB1 algorithm.

@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+// -------------------------------------- STATIC AUXILIARY FUNCTIONS --------------------------------------
+
+
 /**
  * @brief Handles the generic extraction flow (Header -> Data -> Extension) using a specific byte extraction function.
  * @param image Pointer to the BMPImage.
@@ -84,6 +88,112 @@ static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size
     *ext_len_out = ext_bytes_read + 1;
 
     return data_buffer;
+}
+
+/**
+ * @brief PHASE 1: Simulates LSB insertion to calculate the 4-bit inversion map.
+ * @param image Pointer to the BMPImage structure.
+ * @param secret_buffer The buffer containing the payload (Size|Data|Ext).
+ * @param payload_bits Total number of payload bits (excluding control map).
+ * @param calculated_map_out Pointer to store the resulting 4-bit inversion map.
+ * @return EXIT_SUCCESS or EXIT_FAILURE on read error.
+ */
+static int calculate_inversion_map(BMPImage *image, const unsigned char *secret_buffer, size_t payload_bits, unsigned char *calculated_map_out) {
+    PatternStats stats[LSBI_PATTERNS] = {0};
+
+    if (fseek(image->in, image->fileHeader->bfOffBits, SEEK_SET) != 0) {
+        fprintf(stderr, "Error: Failed to reset file pointer for map calculation.\n");
+        return EXIT_FAILURE;
+    }
+
+    Pixel current_pixel = {0};
+    size_t data_bit_idx = 0;
+
+    while (data_bit_idx < payload_bits) {
+        if (fread(&current_pixel, sizeof(Pixel), 1, image->in) != 1) {
+            fprintf(stderr, "Error: Unexpected EOF during LSBI simulation.\n");
+            return EXIT_FAILURE;
+        }
+
+        unsigned char *components[3] = {&(current_pixel.blue), &(current_pixel.green), &(current_pixel.red)};
+
+        for (int i = 0; i < 3; i++) {
+            if (data_bit_idx >= payload_bits) break;
+
+            // LSBI Rule: Skip the Red
+            if (i == 2) {
+                continue;
+            }
+
+            int secret_bit = get_nth_bit(secret_buffer, data_bit_idx);
+            unsigned char cover_value = *components[i];
+
+            unsigned char pattern = (cover_value >> 1) & 0x03;
+
+            if ((cover_value & 1) != secret_bit) {
+                stats[pattern].changed_count++;
+            } else {
+                stats[pattern].unchanged_count++;
+            }
+
+            data_bit_idx++;
+        }
+    }
+
+    // Calculate the Final Map
+    unsigned char calculated_map = 0;
+    for (int i = 0; i < LSBI_PATTERNS; i++) {
+        // Invert if the count of changed pixels is GREATER than the count of unchanged pixels
+        if (stats[i].changed_count > stats[i].unchanged_count) {
+            calculated_map |= (1 << i);
+        }
+    }
+
+    *calculated_map_out = calculated_map;
+    return EXIT_SUCCESS;
+}
+
+/**
+ * @brief PHASE 2: Performs the actual embedding using the calculated inversion map.
+ * @param image Pointer to the BMPImage structure.
+ * @param secret_buffer The buffer containing the payload (Size|Data|Ext).
+ * @param buffer_len Total payload length in bytes.
+ * @param inversion_map The 4-bit map calculated in Phase 1.
+ * @param required_bits The total number of bits to hide (payload + control).
+ * @return EXIT_SUCCESS or EXIT_FAILURE on write error or premature finish.
+ */
+static int perform_final_embedding(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len, unsigned char inversion_map, size_t required_bits) {
+    // Reset file pointer to the start of pixel data for the final embedding pass
+    if (fseek(image->in, image->fileHeader->bfOffBits, SEEK_SET) != 0) {
+        fprintf(stderr, "Error: Failed to reset file pointer for final embedding.\n");
+        return EXIT_FAILURE;
+    }
+
+    // Configure the context with the calculated map
+    StegoContext ctx = {
+            .data_buffer = (unsigned char *)secret_buffer,
+            .data_buffer_len = buffer_len,
+            .current_bit_idx = 0, // Starts at 0, ready to embed the 4-bit map first
+            .inversion_map = inversion_map
+    };
+
+    // Write headers to the output file before iterating through pixels
+    if (fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out) != 1 ||
+        fwrite(image->infoHeader, sizeof(BMPInfoHeader), 1, image->out) != 1) {
+        fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);
+        return EXIT_FAILURE;
+    }
+
+    // Invoke iteration. The callback handles the map (LSB1) and the payload (LSBI).
+    iterate_bmp(image, lsbi_embed_pixel_callback, &ctx);
+
+    // Verification
+    if (ctx.current_bit_idx < required_bits) {
+        fprintf(stderr, "Error: Steganography process finished prematurely. Wrote %zu bits of %zu required.\n", ctx.current_bit_idx, required_bits);
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }
 
 // -------------------------------------- LSB1 --------------------------------------
@@ -255,10 +365,14 @@ unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t 
 }
 
 // -------------------------------------- LSBI --------------------------------------
+/**
+ * @brief Callback for LSBI: conditionally modifies a pixel component based on a bit inversion strategy.
+ * PHASE 1 (Bits 0-3): Inserts the 4-bit Inversion Map using standard LSB1 logic (BGR order).
+ * PHASE 2 (Bit 4 onwards): Inserts one secret bit into Blue or Green (skips Red), applying conditional LSB inversion to minimize changes.
+ */
 void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx) {
     StegoContext *stego_ctx = (StegoContext *)ctx;
-
-    const size_t control_limit = 4;
+    const size_t control_limit = LSBI_CONTROL_BITS;
     const size_t total_bits_with_overhead = (stego_ctx->data_buffer_len * 8) + control_limit;
 
     if (stego_ctx->current_bit_idx >= total_bits_with_overhead) {
@@ -272,93 +386,60 @@ void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx) {
             return;
         }
 
-        // ==========================================================
-        // FASE 1: CONTROL (Bits 0-3)
-        // ==========================================================
+        // -- Step 1: Insert the Map using LSB1 ---
         if (stego_ctx->current_bit_idx < control_limit) {
 
-            // 1. Extraer Bit de Control: Lee el bit de la inversion_map (0 o 1)
+            // 1. Extract Control Bit from the inversion map
             int control_bit = (stego_ctx->inversion_map >> stego_ctx->current_bit_idx) & 1;
 
-            // 2. Inserción LSB1 Normal (Limpia LSB con 0xFE, inserta el bit)
+            // 2. Standard LSB1 Insertion (Clear LSB, insert bit)
             *components[i] &= 0xFE;
             *components[i] |= control_bit;
 
-            // 3. Avance de índice y pasar al siguiente componente/píxel
+            // 3. Advance index and move to the next component/pixel
             stego_ctx->current_bit_idx++;
             continue;
         }
 
-        // ==========================================================
-        // FASE 2: DATOS (Bit 4 en adelante)
-        // ==========================================================
-
-        // a) Regla LSBI: Ignorar Canal Red (i=2)
-        // El LSBI original usa solo Blue y Green como portadores de datos.
+        // --- Step 2: Insert the payload using LSBI logic ---
         if (i == 2) {
-            continue;
+            continue;   // Ignore RED
         }
 
-        // b) Obtener Bit Secreto (del payload real)
-        // Restamos el overhead (4 bits) al índice total para apuntar al buffer del payload.
         size_t data_bit_idx = stego_ctx->current_bit_idx - control_limit;
         int bit_to_insert = get_nth_bit(stego_ctx->data_buffer, data_bit_idx);
 
-        // c) Obtener Patrón Original (Patrón P)
-        // Guardamos el valor original y aislamos los Bits 1 y 2 para el patrón (00, 01, 10, 11)
         unsigned char original_value = *components[i];
-        unsigned char pattern = (original_value >> 1) & 0x03; // Extrae bits 1 y 2
+        unsigned char pattern = (original_value >> 1) & 0x03;
 
-        // d) Aplicar LSB1 Inicial (El 'stego-pixel' inicial)
         *components[i] &= 0xFE;
         *components[i] |= bit_to_insert;
 
-        // e) Lógica de Inversión Condicional (LSBI)
-        // Verificamos si el bit en la 'inversion_map' (1010) correspondiente a 'pattern' es 1.
         unsigned char inversion_flag = (stego_ctx->inversion_map >> pattern) & 1;
 
         if (inversion_flag) {
-            // Si el flag es 1, invertimos el LSB final con XOR 0x01
             *components[i] ^= 0x01;
         }
 
-        // f) Avance de índice (solo si se insertó un bit de datos)
         stego_ctx->current_bit_idx++;
     }
 }
 
 int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len) {
-    unsigned char *bmp_comp_data = NULL;
-    unsigned char calculated_map = 0;
+    const size_t payload_bits = buffer_len * 8;
+    const size_t required_bits = payload_bits + LSBI_CONTROL_BITS;
+    unsigned char inversion_map = 0;
 
-    free(bmp_comp_data);
-
-    StegoContext ctx = {
-            .data_buffer = (unsigned char *)secret_buffer,
-            .data_buffer_len = buffer_len,
-            .current_bit_idx = 0,
-            .inversion_map = calculated_map
-    };
-
-    if (fwrite(image->fileHeader, sizeof(BMPFileHeader), 1, image->out) != 1 ||
-        fwrite(image->infoHeader, sizeof(BMPInfoHeader), 1, image->out) != 1) {
-        fprintf(stderr, ERR_FAILED_TO_WRITE_BMP);
+    // LSBI uses 2 bits per pixel (Blue and Green) for the payload.
+    if (!check_bmp_capacity(image, required_bits, LSBI_BITS_PER_PIXEL)) {
         return EXIT_FAILURE;
     }
 
-    if (fseek(image->in, image->fileHeader->bfOffBits, SEEK_SET) != 0) {
-        fprintf(stderr, "Error: Failed to reset BMP file pointer for insertion.\n");
+    if (calculate_inversion_map(image, secret_buffer, payload_bits, &inversion_map) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
 
-    iterate_bmp(image, lsbi_embed_pixel_callback, &ctx);
-
-    size_t required_bits = (buffer_len * 8) + 4;
-    if (ctx.current_bit_idx < required_bits) {
-        fprintf(stderr, "Warning: Steganography process finished prematurely. %zu bits of %zu were written.\n", ctx.current_bit_idx, required_bits);
-    }
-
-    return EXIT_SUCCESS;
+    return perform_final_embedding(image, secret_buffer, buffer_len, inversion_map, required_bits);
 }
 
 unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
