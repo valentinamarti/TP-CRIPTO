@@ -33,4 +33,16 @@ uint32_t read_size_header(unsigned char *buffer);
  */
  int write_secret_from_buffer(const char *out_base_path, unsigned char *buffer, size_t buffer_len,size_t extension_len);
 
+/**
+ * @brief Extracts the 4 Least Significant Bits (LSBs) from the next color component.
+ * * Reads the LSB nibble (4 bits) from the next color component (Blue, Green, or Red)
+ * in sequence, advancing the component counter. Reads a new pixel when transitioning
+ * from Red to Blue.
+ * @param image Pointer to the BMPImage structure.
+ * @param bit_count Pointer to the component counter (0=B, 1=G, 2=R).
+ * @param current_pixel Pointer to the current Pixel data structure.
+ * @return The extracted nibble (0x00 - 0x0F), or 0xFF on read error (e.g., EOF).
+ */
+unsigned char extract_nibble(BMPImage *image, int *bit_count, Pixel *current_pixel);
+
 #endif

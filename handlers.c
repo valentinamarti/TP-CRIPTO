@@ -163,6 +163,8 @@ int handle_extract_mode(const ProgramArgs *args) {
 
     if (strcmp(args->steg_algorithm, "LSB1") == 0) {
         extracted_buffer = lsb1_extract(image, &extracted_len,&extension_len);
+    } else if (strcmp(args->steg_algorithm, "LSB4") == 0) {
+        extracted_buffer = lsb4_extract(image, &extracted_len,&extension_len);
     } else {
         fprintf(stderr, "Error: Steganography algorithm '%s' not supported for extraction.\n", args->steg_algorithm);
         goto cleanup_ext;

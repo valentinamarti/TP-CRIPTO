@@ -22,15 +22,6 @@ static int get_nth_bit(const unsigned char *data_buffer, size_t n) {
 }
 
 /**
- * @brief Calculates padding bytes per row.
- * @param width Image width in pixels.
- * @return Number of padding bytes (0-3).
- */
- static int get_padding(int width) {
-    return (4 - (width * sizeof(Pixel)) % 4) % 4;
-}
-
-/**
  * @brief Loads the usable color components (Blue and Green) from the carrier BMP into memory.
  *
  * This function performs the necessary file reading (LSBI Phase 1) to extract only the
@@ -303,18 +294,6 @@ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len, size_t 
     return data_buffer;
 }
 
-unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len) {
-    if (!image || !image->in) {
-        fprintf(stderr, ERR_INVALID_BMP);
-        return NULL;
-    }
-
-    unsigned char size_buffer[4] = {0};
-    Pixel current_pixel;
-    int bit_count = 0; // Tracks component (0=B, 1=G, 2=R)
-    int bit;
-}
-
 // -------------------------------------- LSB4 --------------------------------------
 /**
  * @brief Callback for LSB4: modifies a pixel by inserting 12 bits of the secret message.
@@ -382,6 +361,107 @@ int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     return EXIT_SUCCESS;
 }
 
+unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
+    if (!image || !image->in) {
+        fprintf(stderr, ERR_INVALID_BMP);
+        return NULL;
+    }
+
+    unsigned char size_buffer[4] = {0};
+    Pixel current_pixel;
+    int bit_count = 0;
+
+    // --- Step 1: Extract 32-bit Size Header (8 nibbles, MSB-first) ---
+    for (int i = 0; i < 8; i++) {
+        unsigned char nibble = extract_nibble(image, &bit_count, &current_pixel);
+        if (nibble == 0xFF) return NULL;
+
+        int byte_idx = i / 2;
+        int nibble_in_byte = i % 2;
+
+        if (nibble_in_byte == 0) {
+            size_buffer[byte_idx] |= (nibble << 4);
+        } else {
+            size_buffer[byte_idx] |= nibble;
+        }
+    }
+
+    uint32_t data_size = read_size_header(size_buffer);
+
+    // Sanity check
+    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
+    if (data_size == 0 || data_size > max_capacity_bytes) {
+        fprintf(stderr, "Error: Invalid or impossibly large data size extracted: %u\n", data_size);
+        return NULL;
+    }
+
+    // --- Step 2: Allocate memory for the file data + extension ---
+    size_t total_buffer_allocation = (size_t)data_size + MAX_EXT_LEN;
+    unsigned char *data_buffer = malloc(total_buffer_allocation);
+    if (!data_buffer) {
+        fprintf(stderr, "Error: Failed to allocate memory for extracted data.\n");
+        return NULL;
+    }
+    memset(data_buffer, 0, total_buffer_allocation);
+
+    // --- Step 3: Extract Data (data_size bytes) ---
+    size_t current_byte_idx = 0;
+
+    while (current_byte_idx < data_size) {
+        unsigned char output_byte = 0;
+
+        // NIBBLE 1 (MSB)
+        unsigned char nibble1 = extract_nibble(image, &bit_count, &current_pixel);
+        if (nibble1 == 0xFF) { free(data_buffer); return NULL; }
+        output_byte |= (nibble1 << 4);
+
+        // NIBBLE 2 (LSB)
+        unsigned char nibble2 = extract_nibble(image, &bit_count, &current_pixel);
+        if (nibble2 == 0xFF) { free(data_buffer); return NULL; }
+        output_byte |= nibble2;
+
+        data_buffer[current_byte_idx] = output_byte;
+        current_byte_idx++;
+    }
+
+    // --- Step 4: Extract Extension (secuencial hasta '\0') ---
+    size_t ext_start_byte = data_size;
+    size_t ext_bytes_read = 0;
+
+    while (ext_bytes_read < MAX_EXT_LEN) {
+        unsigned char current_ext_byte = 0;
+
+        // NIBBLE 1 (MSB)
+        unsigned char nibble1 = extract_nibble(image, &bit_count, &current_pixel);
+        if (nibble1 == 0xFF) { free(data_buffer); return NULL; }
+        current_ext_byte |= (nibble1 << 4);
+
+        // NIBBLE 2 (LSB)
+        unsigned char nibble2 = extract_nibble(image, &bit_count, &current_pixel);
+        if (nibble2 == 0xFF) { free(data_buffer); return NULL; }
+        current_ext_byte |= nibble2;
+
+        data_buffer[ext_start_byte + ext_bytes_read] = current_ext_byte;
+
+        if (current_ext_byte == '\0') {
+            break;
+        }
+
+        ext_bytes_read++;
+    }
+
+    if (ext_bytes_read >= MAX_EXT_LEN) {
+        fprintf(stderr, "Error: Extension length exceeded maximum allowed size (%d bytes) without terminator.\n", MAX_EXT_LEN);
+        free(data_buffer);
+        return NULL;
+    }
+
+    // --- Step 5: Finalizar y Asignar Tamaños ---
+    *extracted_data_len = (size_t)data_size;
+    *extension_len = ext_bytes_read + 1;
+
+    return data_buffer;
+}
 
 // -------------------------------------- LSBI --------------------------------------
 void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx) {

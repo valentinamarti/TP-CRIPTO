@@ -89,3 +89,25 @@ int write_secret_from_buffer(const char *out_base_path, unsigned char *buffer, s
     free(full_out_path);
     return 0; // Success
 }
+
+unsigned char extract_nibble(BMPImage *image, int *bit_count, Pixel *current_pixel) {
+    unsigned char *component;
+    int component_idx = (*bit_count) % 3; // 0=B, 1=G, 2=R
+
+    if (component_idx == 0) {
+        if (fread(current_pixel, sizeof(Pixel), 1, image->in) != 1) {
+            fprintf(stderr, "Error: Falló la lectura de píxel durante la extracción LSB4.\n");
+            return 0xFF;
+        }
+    }
+
+    if (component_idx == 0) component = &(current_pixel->blue);
+    else if (component_idx == 1) component = &(current_pixel->green);
+    else component = &(current_pixel->red);
+
+    unsigned char nibble = (*component) & 0x0F;
+
+    (*bit_count)++;
+
+    return nibble;
+}

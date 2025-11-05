@@ -91,6 +91,23 @@ int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
  */
 void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx);
 
+
+/**
+ * @brief Extracts a hidden secret payload from a BMP image using the LSB4 steganography algorithm.
+ *
+ * This function reads the image pixel data, extracting 4 bits (a nibble) from the Least
+ * Significant Bits (LSBs) of each color component (Blue, Green, Red) to reconstruct the
+ * hidden content. It first extracts a 4-byte Big Endian size header, followed by the file
+ * data, and finally the file extension (which is terminated by a null byte '\0').
+ *
+ * @param image Pointer to an *opened* BMPImage structure (must have valid 'in' file).
+ * @param extracted_data_len Pointer to a size_t variable to store the length of the extracted data.
+ * @return A pointer to the dynamically allocated buffer containing the extracted data,
+ * or NULL on error (e.g., read error, allocation failure).
+ */
+unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len);
+
+
 /**
  * @brief Hides the pre-built secret buffer inside a BMP using the LSBI (Improved) algorithm.
  *
