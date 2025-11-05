@@ -22,6 +22,15 @@ static int get_nth_bit(const unsigned char *data_buffer, size_t n) {
 }
 
 /**
+ * @brief Calculates padding bytes per row.
+ * @param width Image width in pixels.
+ * @return Number of padding bytes (0-3).
+ */
+ static int get_padding(int width) {
+    return (4 - (width * sizeof(Pixel)) % 4) % 4;
+}
+
+/**
  * @brief Loads the usable color components (Blue and Green) from the carrier BMP into memory.
  *
  * This function performs the necessary file reading (LSBI Phase 1) to extract only the
@@ -188,7 +197,7 @@ int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     return EXIT_SUCCESS;
 }
 
-unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len) {
+unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len,size_t *extension_len) {
     if (!image || !image->in) {
         fprintf(stderr, ERR_INVALID_BMP);
         return NULL;
@@ -214,14 +223,7 @@ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len) {
     }
 
     // Convert Big Endian size buffer to a usable integer
-    uint32_t data_size = read_size_header(size_buffer);
-    
-    // Sanity check on the size
-    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
-    if (data_size == 0 || data_size > max_capacity_bytes) {
-        fprintf(stderr, "Error: Invalid or impossibly large data size extracted: %u\n", data_size);
-        return NULL;
-    }
+    uint32_t data_size = read_size_header(size_buffer);    
     
     *extracted_data_len = (size_t)data_size;
 
@@ -250,8 +252,67 @@ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len) {
             data_buffer[byte_idx] |= (1 << bit_pos);
         }
     }
+    unsigned char current_ext_byte = 0;
+    size_t current_byte_idx = data_size;
+    size_t current_buffer_size = data_size;
+    int ext_bit_pos = 0;
+    
+    while (1) {
+        // Check if we need to grow the buffer
+        if (current_byte_idx >= current_buffer_size) {
+            current_buffer_size += CHUNK_SIZE;
+            unsigned char *new_buffer = realloc(data_buffer, current_buffer_size);
+            if (!new_buffer) {
+                fprintf(stderr, "Error: Failed to realloc memory for extension.\n");
+                free(data_buffer);
+                return NULL;
+            }
+            data_buffer = new_buffer;
+            // Zero out the new chunk
+            memset(data_buffer + current_byte_idx, 0, CHUNK_SIZE);
+        }
+
+        bit = extract_next_bit(image, &bit_count, &current_pixel);
+        if (bit == -1) {
+            fprintf(stderr, "Error: File ended before finding extension terminator.\n");
+            free(data_buffer);
+            return NULL;
+        }
+
+        if (bit) {
+            current_ext_byte |= (1 << ext_bit_pos);
+        }
+        ext_bit_pos++;
+
+
+        if (ext_bit_pos == 8) { // We've completed a byte
+            data_buffer[current_byte_idx] = current_ext_byte;
+            
+            if (current_ext_byte == '\0') {
+                break; // Found terminator
+            }
+            
+            // Reset for next byte
+            current_byte_idx++;
+            current_ext_byte = 0;
+            ext_bit_pos = 0;
+        }
+    }
+    *extension_len = current_byte_idx- data_size;
 
     return data_buffer;
+}
+
+unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len) {
+    if (!image || !image->in) {
+        fprintf(stderr, ERR_INVALID_BMP);
+        return NULL;
+    }
+
+    unsigned char size_buffer[4] = {0};
+    Pixel current_pixel;
+    int bit_count = 0; // Tracks component (0=B, 1=G, 2=R)
+    int bit;
 }
 
 // -------------------------------------- LSB4 --------------------------------------

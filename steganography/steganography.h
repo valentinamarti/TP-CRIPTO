@@ -7,7 +7,7 @@
 
 #define LSBI_PATTERNS 4 // 00, 01, 10, 11
 #define LSBI_OVERHEAD 4 // 4 bits de control
-
+#define CHUNK_SIZE 16
 
 /**
  * @brief Steganography context structure.
@@ -67,7 +67,7 @@ void lsb1_embed_pixel_callback(Pixel *pixel, void *ctx);
  * @return A pointer to the dynamically allocated buffer containing the extracted data,
  * or NULL on error (e.g., read error, allocation failure).
  */
- unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len);
+ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len,size_t *extension_len);
 
 /**
  * @brief Hides the pre-built secret buffer inside a BMP using the LSB4 algorithm.

@@ -31,9 +31,9 @@ typedef struct {
 
 // Pixel structure (RGB)
 typedef struct {
-    unsigned char red;
-    unsigned char green;
     unsigned char blue;
+    unsigned char green;
+    unsigned char red;
 } __attribute__((packed)) Pixel;
 
 // BMP Image structure

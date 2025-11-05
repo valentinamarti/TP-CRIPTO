@@ -153,7 +153,8 @@ int handle_extract_mode(const ProgramArgs *args) {
     unsigned char *extracted_buffer = NULL; // Buffer: (encrypted data) or (real data || ext)
     unsigned char *decrypted_buffer = NULL; // Buffer: (size || real data || ext)
     int result = NO_SUCCESS;
-    size_t extracted_len = 0;
+    size_t extracted_len;
+    size_t extension_len;
 
     image = open_bmp(args->bitmap_file);
     if (!image) {
@@ -161,7 +162,7 @@ int handle_extract_mode(const ProgramArgs *args) {
     }
 
     if (strcmp(args->steg_algorithm, "LSB1") == 0) {
-        extracted_buffer = lsb1_extract(image, &extracted_len);
+        extracted_buffer = lsb1_extract(image, &extracted_len,&extension_len);
     } else {
         fprintf(stderr, "Error: Steganography algorithm '%s' not supported for extraction.\n", args->steg_algorithm);
         goto cleanup_ext;
@@ -195,23 +196,16 @@ int handle_extract_mode(const ProgramArgs *args) {
             goto cleanup_ext;
         }
 
-        if (write_secret_from_buffer(args->output_file, decrypted_buffer, decrypted_len) == 0) {
+        if (write_secret_from_buffer(args->output_file, decrypted_buffer, decrypted_len,extension_len) == 0) {
             result = SUCCESS;
         }
 
     } else {
         // No encryption, write directly
-        size_t total_buffer_len = sizeof(uint32_t) + extracted_len;
-        unsigned char *full_buffer = malloc(total_buffer_len);
-        if (!full_buffer) goto cleanup_ext;
 
-        write_size_header(full_buffer, (long)extracted_len);
-        memcpy(full_buffer + sizeof(uint32_t), extracted_buffer, extracted_len);
-
-        if (write_secret_from_buffer(args->output_file, full_buffer, total_buffer_len) == 0) {
+        if (write_secret_from_buffer(args->output_file, extracted_buffer, extracted_len,extension_len) == 0) {
             result = SUCCESS;
         }
-        free(full_buffer);
     }
 
 cleanup_ext:
