@@ -86,36 +86,6 @@ static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size
     return data_buffer;
 }
 
-static int get_next_byte_lsb1(BMPImage *image, ExtractionContext *ctx) {
-    unsigned char assembled_byte = 0;
-    for (int i = 0; i < 8; i++) {
-        int bit = extract_next_bit(image, &ctx->bit_count, &ctx->current_pixel);
-        if (bit == -1) return -1;
-
-        size_t bit_pos = 7 - i;
-        if (bit) {
-            assembled_byte |= (1 << bit_pos);
-        }
-    }
-    return (int)assembled_byte;
-}
-
-static int get_next_byte_lsb4(BMPImage *image, ExtractionContext *ctx) {
-    unsigned char output_byte = 0;
-
-    // NIBBLE 1 (MSB)
-    unsigned char nibble1 = extract_nibble(image, &ctx->bit_count, &ctx->current_pixel);
-    if (nibble1 == 0xFF) return -1;
-    output_byte |= (nibble1 << 4);
-
-    // NIBBLE 2 (LSB)
-    unsigned char nibble2 = extract_nibble(image, &ctx->bit_count, &ctx->current_pixel);
-    if (nibble2 == 0xFF) return -1;
-    output_byte |= nibble2;
-
-    return (int)output_byte;
-}
-
 // -------------------------------------- LSB1 --------------------------------------
 /**
  * @brief Callback for LSB1: modifies a pixel by inserting 3 bits of the secret message.
@@ -175,6 +145,20 @@ int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     }
 
     return EXIT_SUCCESS;
+}
+
+static int get_next_byte_lsb1(BMPImage *image, ExtractionContext *ctx) {
+    unsigned char assembled_byte = 0;
+    for (int i = 0; i < 8; i++) {
+        int bit = extract_next_bit(image, &ctx->bit_count, &ctx->current_pixel);
+        if (bit == -1) return -1;
+
+        size_t bit_pos = 7 - i;
+        if (bit) {
+            assembled_byte |= (1 << bit_pos);
+        }
+    }
+    return (int)assembled_byte;
 }
 
 unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
@@ -247,6 +231,22 @@ int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     }
 
     return EXIT_SUCCESS;
+}
+
+static int get_next_byte_lsb4(BMPImage *image, ExtractionContext *ctx) {
+    unsigned char output_byte = 0;
+
+    // NIBBLE 1 (MSB)
+    unsigned char nibble1 = extract_nibble(image, &ctx->bit_count, &ctx->current_pixel);
+    if (nibble1 == 0xFF) return -1;
+    output_byte |= (nibble1 << 4);
+
+    // NIBBLE 2 (LSB)
+    unsigned char nibble2 = extract_nibble(image, &ctx->bit_count, &ctx->current_pixel);
+    if (nibble2 == 0xFF) return -1;
+    output_byte |= nibble2;
+
+    return (int)output_byte;
 }
 
 unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {

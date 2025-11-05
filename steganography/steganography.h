@@ -24,11 +24,6 @@ typedef struct {
 } StegoContext;
 
 typedef struct {
-    long count_normal[LSBI_PATTERNS];
-    long count_inverted[LSBI_PATTERNS];
-} LSBIChangeCounts;
-
-typedef struct {
     int bit_count;
     Pixel current_pixel;
     unsigned char inversion_map;
