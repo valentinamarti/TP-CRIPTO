@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#define MAX_EXT_LEN 256
 
 /**
  * @brief Retrieves the N-th bit (0-indexed, LSB first) from the data buffer.
@@ -18,7 +18,7 @@ static int get_nth_bit(const unsigned char *data_buffer, size_t n) {
     size_t byte_idx = n / 8;
     size_t bit_pos = n % 8;
 
-    return (data_buffer[byte_idx] >> bit_pos) & 1;
+    return (data_buffer[byte_idx] >> (7 - bit_pos)) & 1;
 }
 
 /**
@@ -197,7 +197,7 @@ int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     return EXIT_SUCCESS;
 }
 
-unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len,size_t *extension_len) {
+unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
     if (!image || !image->in) {
         fprintf(stderr, ERR_INVALID_BMP);
         return NULL;
@@ -205,100 +205,100 @@ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len,size_t *
 
     unsigned char size_buffer[4] = {0};
     Pixel current_pixel;
-    int bit_count = 0; // Tracks component (0=B, 1=G, 2=R)
+    int bit_count = 0;
     int bit;
 
-    // --- Step 1: Extract 32-bit Size Header ---
+    // --- Step 1: Extract 32-bit Size Header (MSB-first for Big Endian) ---
     for (int i = 0; i < 32; i++) {
         bit = extract_next_bit(image, &bit_count, &current_pixel);
-        if (bit == -1) return NULL; // Read error
+        if (bit == -1) return NULL;
 
-        // Set the bit in the correct position in size_buffer
-        // We re-assemble LSB first (pos 0) to MSB first (pos 7)
         int byte_idx = i / 8;
-        int bit_pos = i % 8;
+        size_t bit_pos = 7 - (i % 8); // MSB-first
+
         if (bit) {
             size_buffer[byte_idx] |= (1 << bit_pos);
         }
     }
 
     // Convert Big Endian size buffer to a usable integer
-    uint32_t data_size = read_size_header(size_buffer);    
-    
-    *extracted_data_len = (size_t)data_size;
+    uint32_t data_size = read_size_header(size_buffer);
 
-    // --- Step 2: Allocate memory for the secret data ---
+    // Sanity check
+    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
+    if (data_size == 0 || data_size > max_capacity_bytes) {
+        fprintf(stderr, "Error: Invalid or impossibly large data size extracted: %u\n", data_size);
+        return NULL;
+    }
+
+    // --- Step 2: Allocate memory for the file data ---
     unsigned char *data_buffer = malloc(data_size);
     if (!data_buffer) {
         fprintf(stderr, "Error: Failed to allocate memory for extracted data.\n");
         return NULL;
     }
-    memset(data_buffer, 0, data_size); // Initialize to zero
+    memset(data_buffer, 0, data_size);
 
-    // --- Step 3: Extract the Data (data_size * 8 bits) ---
+    // --- Step 3: Extract Data (data_size * 8 bits, MSB-first) ---
     size_t total_bits_to_extract = (size_t)data_size * 8;
     for (size_t i = 0; i < total_bits_to_extract; i++) {
         bit = extract_next_bit(image, &bit_count, &current_pixel);
         if (bit == -1) {
             fprintf(stderr, "Error: Unexpected end of file during data extraction.\n");
             free(data_buffer);
-            return NULL; // Read error
+            return NULL;
         }
 
-        // Set the bit in the correct position in data_buffer
         size_t byte_idx = i / 8;
-        size_t bit_pos = i % 8;
+        size_t bit_pos = 7 - (i % 8); // MSB-first
         if (bit) {
             data_buffer[byte_idx] |= (1 << bit_pos);
         }
     }
-    unsigned char current_ext_byte = 0;
-    size_t current_byte_idx = data_size;
-    size_t current_buffer_size = data_size;
-    int ext_bit_pos = 0;
-    
-    while (1) {
-        // Check if we need to grow the buffer
-        if (current_byte_idx >= current_buffer_size) {
-            current_buffer_size += CHUNK_SIZE;
-            unsigned char *new_buffer = realloc(data_buffer, current_buffer_size);
-            if (!new_buffer) {
-                fprintf(stderr, "Error: Failed to realloc memory for extension.\n");
+
+    // --- Step 4: Extract Extension (secuencial hasta '\0') ---
+    size_t current_buffer_len = data_size;
+    size_t ext_bytes_read = 0;
+
+    while (ext_bytes_read < MAX_EXT_LEN) {
+        unsigned char current_ext_byte = 0;
+
+        for (int i = 0; i < 8; i++) {
+            bit = extract_next_bit(image, &bit_count, &current_pixel);
+            if (bit == -1) {
+                fprintf(stderr, "Error: File ended before finding extension terminator.\n");
                 free(data_buffer);
                 return NULL;
             }
-            data_buffer = new_buffer;
-            // Zero out the new chunk
-            memset(data_buffer + current_byte_idx, 0, CHUNK_SIZE);
+
+            size_t bit_pos = 7 - i; // MSB-first
+            if (bit) {
+                current_ext_byte |= (1 << bit_pos);
+            }
         }
 
-        bit = extract_next_bit(image, &bit_count, &current_pixel);
-        if (bit == -1) {
-            fprintf(stderr, "Error: File ended before finding extension terminator.\n");
+        size_t new_total_size = current_buffer_len + 1;
+        unsigned char *new_buffer = realloc(data_buffer, new_total_size);
+        if (!new_buffer) {
+            fprintf(stderr, "Error: Failed to reallocate memory for extension.\n");
             free(data_buffer);
             return NULL;
         }
+        data_buffer = new_buffer;
 
-        if (bit) {
-            current_ext_byte |= (1 << ext_bit_pos);
+        data_buffer[current_buffer_len] = current_ext_byte;
+        current_buffer_len = new_total_size;
+
+        if (current_ext_byte == '\0') {
+            break; // Found extension
         }
-        ext_bit_pos++;
 
-
-        if (ext_bit_pos == 8) { // We've completed a byte
-            data_buffer[current_byte_idx] = current_ext_byte;
-            
-            if (current_ext_byte == '\0') {
-                break; // Found terminator
-            }
-            
-            // Reset for next byte
-            current_byte_idx++;
-            current_ext_byte = 0;
-            ext_bit_pos = 0;
-        }
+        ext_bytes_read++;
     }
-    *extension_len = current_byte_idx- data_size;
+
+    // --- Step 5: Finalizar y Asignar Tamaños ---
+    *extracted_data_len = (size_t)data_size;
+    *extension_len = ext_bytes_read + 1;
 
     return data_buffer;
 }
