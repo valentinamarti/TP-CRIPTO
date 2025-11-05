@@ -318,20 +318,20 @@ void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx) {
         size_t bit_offset = stego_ctx->current_bit_idx % 8;
         unsigned char secret_4_bits;
 
-        // 1. Get the secret bit (0 or 1)
+        // 1. Get the secret nibble (4 bits) in MSB-first order
         if (bit_offset == 0) {
-            secret_4_bits = stego_ctx->data_buffer[byte_idx] & 0x0F;
-        } else {
             secret_4_bits = (stego_ctx->data_buffer[byte_idx] >> 4) & 0x0F;
+        } else {
+            secret_4_bits = stego_ctx->data_buffer[byte_idx] & 0x0F;
         }
 
-        // 2. Clear the LSB of the component (AND con 0xF0 = 1111 0000)
+        // 2. Clear the 4 LSBs of the component (AND con 0xF0 = 1111 0000)
         *components[i] &= 0xF0;
 
-        // 3. Insert the secret bit (OR with 0 or 1)
+        // 3. Insert the secret nibble (OR)
         *components[i] |= secret_4_bits;
 
-        // Advance to the next bit to hide
+        // Advance the index by 4 bits (un nibble)
         stego_ctx->current_bit_idx += 4;
     }
 }
