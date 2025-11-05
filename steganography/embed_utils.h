@@ -7,7 +7,8 @@
 
 #define LSB1_BITS_PER_PIXEL 3
 #define LSB4_BITS_PER_PIXEL 12
-#define LSBI_CONTROL_BITS 3 // todo: chequear como seria el total con el overhead
+#define LSBI_BITS_PER_PIXEL 2   // Because it does not use R
+#define LSBI_CONTROL_BITS 4
 
 #define TRUE 1
 #define FALSE 0
@@ -63,6 +64,15 @@ int check_bmp_capacity(const BMPImage *image, size_t required_data_bits, int bit
  * @return Pointer to the allocated and filled secret buffer, or NULL on error
  */
 unsigned char *build_secret_buffer(const char *in_file, size_t *required_buffer_len);
+
+/**
+ * @brief Retrieves the N-th bit (0-indexed, LSB first) from the data buffer.
+ *
+ * @param data_buffer The byte array containing the secret message.
+ * @param n The bit index to retrieve.
+ * @return 1 if the bit is set, 0 otherwise.
+ */
+int get_nth_bit(const unsigned char *data_buffer, size_t n);
 
 /**
  * @brief Frees the memory allocated for the secret buffer.

@@ -111,3 +111,65 @@ unsigned char extract_nibble(BMPImage *image, int *bit_count, Pixel *current_pix
 
     return nibble;
 }
+
+
+int extract_msb_byte(BMPImage *image, int *bit_count, Pixel *current_pixel, unsigned char inversion_map, int (*bit_extractor)(BMPImage *, int *, Pixel *, unsigned char)) {
+    unsigned char assembled_byte = 0;
+
+    for (int i = 0; i < 8; i++) {
+        int bit = bit_extractor(image, bit_count, current_pixel, inversion_map);
+        if (bit == -1) return -1;
+
+        size_t bit_pos = 7 - i;
+        if (bit) {
+            assembled_byte |= (1 << bit_pos);
+        }
+    }
+    return (int)assembled_byte;
+}
+
+/**
+ * @brief Extrae el siguiente bit de datos aplicando las reglas LSBI (MSB-First, Salto R, Re-inversión).
+ * * @param image Puntero al BMPImage.
+ * @param bit_count Puntero al contador de componentes (0=B, 1=G, 2=R).
+ * @param current_pixel Puntero al píxel actual.
+ * @param inversion_map Mapa de 4 bits para la lógica de inversión condicional.
+ * @return El bit de secreto final (0 o 1), o -1 en caso de error de lectura.
+ */
+int lsbi_extract_data_bit(BMPImage *image, int *bit_count, Pixel *current_pixel, unsigned char inversion_map) {
+
+    unsigned char stego_value;
+    int extracted_lsb, secret_bit;
+
+    // 1. Saltar Canal Rojo (R, índice 2) y leer/avanzar al componente B o G
+    do {
+        int component_idx = (*bit_count) % 3;
+
+        // Si estamos en el canal Azul (indice 0), leemos un nuevo píxel
+        if (component_idx == 0) {
+            if (fread(current_pixel, sizeof(Pixel), 1, image->in) != 1) return -1;
+        }
+
+        if (component_idx == 2) { // Canal R: saltar y avanzar
+            (*bit_count)++;
+            continue;
+        }
+
+        // Asignar puntero al componente B o G
+        unsigned char *component_ptr = (component_idx == 0) ? &(current_pixel->blue) : &(current_pixel->green);
+        stego_value = *component_ptr;
+
+        extracted_lsb = stego_value & 1; // Extraer LSB
+
+        (*bit_count)++; // Avanzar al siguiente componente
+        break;
+    } while (1);
+
+    // 2. Lógica LSBI de Re-Inversión Condicional
+    unsigned char pattern = (stego_value >> 1) & 0x03; // Extraer Bits 1 y 2
+    unsigned char inversion_flag = (inversion_map >> pattern) & 1;
+
+    secret_bit = (inversion_flag) ? (extracted_lsb ^ 1) : extracted_lsb; // Re-invertir si el flag está activo
+
+    return secret_bit;
+}

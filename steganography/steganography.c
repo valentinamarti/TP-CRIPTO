@@ -5,126 +5,115 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define MAX_EXT_LEN 256
 
 /**
- * @brief Retrieves the N-th bit (0-indexed, LSB first) from the data buffer.
- *
- * @param data_buffer The byte array containing the secret message.
- * @param n The bit index to retrieve.
- * @return 1 if the bit is set, 0 otherwise.
+ * @brief Handles the generic extraction flow (Header -> Data -> Extension) using a specific byte extraction function.
+ * @param image Pointer to the BMPImage.
+ * @param data_size_out Pointer to store the extracted data size.
+ * @param ext_len_out Pointer to store the extension length.
+ * @param get_next_byte_func The algorithm-specific function to call for the next byte.
+ * @param ctx Pointer to the context structure containing state (bit_count, pixel, map).
+ * @return Pointer to the extracted payload buffer, or NULL on error.
  */
-static int get_nth_bit(const unsigned char *data_buffer, size_t n) {
-    size_t byte_idx = n / 8;
-    size_t bit_pos = n % 8;
+static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size_out, size_t *ext_len_out, get_next_byte_func_t get_next_byte_func, ExtractionContext *ctx) {
+    // 1. Extract Header (4 bytes)
+    unsigned char size_buffer[4] = {0};
+    for (int i = 0; i < 4; i++) {
+        int extracted_byte = get_next_byte_func(image, ctx);
+        if (extracted_byte == -1) return NULL;
+        size_buffer[i] = (unsigned char)extracted_byte;
+    }
 
-    return (data_buffer[byte_idx] >> (7 - bit_pos)) & 1;
+    uint32_t data_size = read_size_header(size_buffer);
+
+    // Sanity check
+    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
+    if (data_size == 0 || data_size > max_capacity_bytes) {
+        fprintf(stderr, "Error: Invalid or impossibly large data size extracted: %u\n", data_size);
+        return NULL;
+    }
+
+    // 2. Allocate Buffer
+    size_t total_buffer_allocation = (size_t)data_size + MAX_EXT_LEN;
+    unsigned char *data_buffer = malloc(total_buffer_allocation);
+    if (!data_buffer) return NULL;
+    memset(data_buffer, 0, total_buffer_allocation);
+
+    // 3. Extract Data
+    size_t current_byte_idx = 0;
+    while (current_byte_idx < data_size) {
+        int extracted_byte = get_next_byte_func(image, ctx);
+        if (extracted_byte == -1) {
+            fprintf(stderr, "Error: Unexpected end of file during data extraction.\n");
+            free(data_buffer);
+            return NULL;
+        }
+        data_buffer[current_byte_idx] = (unsigned char)extracted_byte;
+        current_byte_idx++;
+    }
+
+    // 4. Extract Extension
+    size_t ext_start_byte = data_size;
+    size_t ext_bytes_read = 0;
+
+    while (ext_bytes_read < MAX_EXT_LEN) {
+        int extracted_byte = get_next_byte_func(image, ctx);
+        if (extracted_byte == -1) {
+            fprintf(stderr, "Error: Unexpected end of file before finding extension terminator.\n");
+            free(data_buffer);
+            return NULL;
+        }
+
+        data_buffer[ext_start_byte + ext_bytes_read] = (unsigned char)extracted_byte;
+
+        if (data_buffer[ext_start_byte + ext_bytes_read] == '\0') {
+            break;
+        }
+
+        ext_bytes_read++;
+    }
+
+    if (ext_bytes_read >= MAX_EXT_LEN) {
+        fprintf(stderr, "Error: Extension length exceeded maximum allowed size (%d bytes) without terminator.\n", MAX_EXT_LEN);
+        free(data_buffer);
+        return NULL;
+    }
+
+    // 5. Finalize and Assign Lengths
+    *data_size_out = (size_t)data_size;
+    *ext_len_out = ext_bytes_read + 1;
+
+    return data_buffer;
 }
 
-/**
- * @brief Loads the usable color components (Blue and Green) from the carrier BMP into memory.
- *
- * This function performs the necessary file reading (LSBI Phase 1) to extract only the
- * Blue and Green bytes from the image data, ignoring the Red channel, and stores them in
- * a contiguous memory array. This array is used by the analysis function
- * (lsbi_analyze_and_generate_map) to dynamically determine the inversion map.
- *
- * NOTE: The caller is responsible for freeing the memory allocated to *comp_data.
- *
- * @param image Pointer to the initialized BMPImage structure.
- * @param comp_data Pointer to a memory location that will store the address of the
- * dynamically allocated array (B, G, B, G, ...) upon success.
- * @param count Pointer to a size_t variable that will store the total number of components loaded (2 * pixel_count).
- * @return 0 on success, EXIT_FAILURE on error (I/O or memory allocation).
- */
-int lsbi_load_bg_components(const BMPImage *image, unsigned char **comp_data, size_t *count) {
-    int pixel_count = get_pixel_count(image);
-    if (pixel_count <= 0) {
-        fprintf(stderr, "Error: Invalid BMP dimensions for analysis.\n");
-        return EXIT_FAILURE;
-    }
+static int get_next_byte_lsb1(BMPImage *image, ExtractionContext *ctx) {
+    unsigned char assembled_byte = 0;
+    for (int i = 0; i < 8; i++) {
+        int bit = extract_next_bit(image, &ctx->bit_count, &ctx->current_pixel);
+        if (bit == -1) return -1;
 
-    size_t required_bytes = (size_t)pixel_count * 2;
-    *comp_data = (unsigned char *)malloc(required_bytes);
-    if (!(*comp_data)) {
-        fprintf(stderr, "Error: Failed to allocate memory for LSBI analysis data.\n");
-        return EXIT_FAILURE;
-    }
-
-    *count = required_bytes;
-    if (fseek(image->in, image->fileHeader->bfOffBits, SEEK_SET) != 0) {
-        fprintf(stderr, "Error: Failed to reset BMP file pointer.\n");
-        free(*comp_data);
-        return EXIT_FAILURE;
-    }
-
-    unsigned char pixel_bytes[3];
-    size_t current_comp_index = 0;
-
-    for (int i = 0; i < pixel_count; i++) {
-        if (fread(pixel_bytes, 1, 3, image->in) != 3) {
-            fprintf(stderr, "Error: Unexpected end of file during component loading.\n");
-            free(*comp_data);
-            return EXIT_FAILURE;
+        size_t bit_pos = 7 - i;
+        if (bit) {
+            assembled_byte |= (1 << bit_pos);
         }
-
-        (*comp_data)[current_comp_index++] = pixel_bytes[0];
-        (*comp_data)[current_comp_index++] = pixel_bytes[1];
     }
-
-    return EXIT_SUCCESS;
+    return (int)assembled_byte;
 }
 
-/**
- * @brief Simulates the insertion process to generate the inversion map based on change minimization.
- *
- * This function performs the necessary analysis (LSBI Phase 1) to determine the optimal
- * inversion rule for each of the four possible 2-bit patterns (00, 01, 10, 11).
- * It counts the total modifications that would occur with and without LSB inversion for each pattern.
- *
- * @param secret_buffer The complete secret payload (Size | Data | Ext) to be hidden.
- * @param buffer_len Length in bytes of the payload.
- * @param bmp_comp_data Array of all usable Blue and Green component bytes from the carrier BMP (must be pre-loaded).
- * @param total_comp_count Total number of usable Blue/Green components available in the array.
- * @return The 4-bit inversion map (unsigned char), where a '1' at bit 'p' means Pattern 'p' must be inverted during embedding.
- */
-unsigned char lsbi_analyze_and_generate_map(const unsigned char *secret_buffer, size_t buffer_len, const unsigned char *bmp_comp_data, size_t total_comp_count) {
-    LSBIChangeCounts counts;
-    for (int i = 0; i < LSBI_PATTERNS; i++) {
-        counts.count_normal[i] = 0;
-        counts.count_inverted[i] = 0;
-    }
+static int get_next_byte_lsb4(BMPImage *image, ExtractionContext *ctx) {
+    unsigned char output_byte = 0;
 
-    unsigned char inversion_map = 0;
-    const size_t total_secret_bits = buffer_len * 8;
-    size_t limit = (total_secret_bits > total_comp_count) ? total_comp_count : total_secret_bits;
+    // NIBBLE 1 (MSB)
+    unsigned char nibble1 = extract_nibble(image, &ctx->bit_count, &ctx->current_pixel);
+    if (nibble1 == 0xFF) return -1;
+    output_byte |= (nibble1 << 4);
 
-    for (size_t comp_idx = 0; comp_idx < limit; comp_idx++) {
+    // NIBBLE 2 (LSB)
+    unsigned char nibble2 = extract_nibble(image, &ctx->bit_count, &ctx->current_pixel);
+    if (nibble2 == 0xFF) return -1;
+    output_byte |= nibble2;
 
-        unsigned char original_value = bmp_comp_data[comp_idx];
-        unsigned char pattern = (original_value >> 1) & 0x03;
-        int secret_bit = get_nth_bit(secret_buffer, comp_idx);
-
-
-        unsigned char normal_stego = (original_value & 0xFE) | secret_bit;
-        unsigned char inverted_stego = normal_stego ^ 0x01;
-
-
-        if (normal_stego != original_value) {
-            counts.count_normal[pattern]++;
-        }
-        if (inverted_stego != original_value) {
-            counts.count_inverted[pattern]++;
-        }
-    }
-
-    for (int p = 0; p < LSBI_PATTERNS; p++) {
-        if (counts.count_inverted[p] <= counts.count_normal[p]) {
-            inversion_map |= (1 << p);
-        }
-    }
-
-    return inversion_map;
+    return (int)output_byte;
 }
 
 // -------------------------------------- LSB1 --------------------------------------
@@ -189,109 +178,8 @@ int embed_lsb1(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
 }
 
 unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
-    if (!image || !image->in) {
-        fprintf(stderr, ERR_INVALID_BMP);
-        return NULL;
-    }
-
-    unsigned char size_buffer[4] = {0};
-    Pixel current_pixel;
-    int bit_count = 0;
-    int bit;
-
-    // --- Step 1: Extract 32-bit Size Header (MSB-first for Big Endian) ---
-    for (int i = 0; i < 32; i++) {
-        bit = extract_next_bit(image, &bit_count, &current_pixel);
-        if (bit == -1) return NULL;
-
-        int byte_idx = i / 8;
-        size_t bit_pos = 7 - (i % 8); // MSB-first
-
-        if (bit) {
-            size_buffer[byte_idx] |= (1 << bit_pos);
-        }
-    }
-
-    // Convert Big Endian size buffer to a usable integer
-    uint32_t data_size = read_size_header(size_buffer);
-
-    // Sanity check
-    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
-    if (data_size == 0 || data_size > max_capacity_bytes) {
-        fprintf(stderr, "Error: Invalid or impossibly large data size extracted: %u\n", data_size);
-        return NULL;
-    }
-
-    // --- Step 2: Allocate memory for the file data ---
-    unsigned char *data_buffer = malloc(data_size);
-    if (!data_buffer) {
-        fprintf(stderr, "Error: Failed to allocate memory for extracted data.\n");
-        return NULL;
-    }
-    memset(data_buffer, 0, data_size);
-
-    // --- Step 3: Extract Data (data_size * 8 bits, MSB-first) ---
-    size_t total_bits_to_extract = (size_t)data_size * 8;
-    for (size_t i = 0; i < total_bits_to_extract; i++) {
-        bit = extract_next_bit(image, &bit_count, &current_pixel);
-        if (bit == -1) {
-            fprintf(stderr, "Error: Unexpected end of file during data extraction.\n");
-            free(data_buffer);
-            return NULL;
-        }
-
-        size_t byte_idx = i / 8;
-        size_t bit_pos = 7 - (i % 8); // MSB-first
-        if (bit) {
-            data_buffer[byte_idx] |= (1 << bit_pos);
-        }
-    }
-
-    // --- Step 4: Extract Extension (secuencial hasta '\0') ---
-    size_t current_buffer_len = data_size;
-    size_t ext_bytes_read = 0;
-
-    while (ext_bytes_read < MAX_EXT_LEN) {
-        unsigned char current_ext_byte = 0;
-
-        for (int i = 0; i < 8; i++) {
-            bit = extract_next_bit(image, &bit_count, &current_pixel);
-            if (bit == -1) {
-                fprintf(stderr, "Error: File ended before finding extension terminator.\n");
-                free(data_buffer);
-                return NULL;
-            }
-
-            size_t bit_pos = 7 - i; // MSB-first
-            if (bit) {
-                current_ext_byte |= (1 << bit_pos);
-            }
-        }
-
-        size_t new_total_size = current_buffer_len + 1;
-        unsigned char *new_buffer = realloc(data_buffer, new_total_size);
-        if (!new_buffer) {
-            fprintf(stderr, "Error: Failed to reallocate memory for extension.\n");
-            free(data_buffer);
-            return NULL;
-        }
-        data_buffer = new_buffer;
-
-        data_buffer[current_buffer_len] = current_ext_byte;
-        current_buffer_len = new_total_size;
-
-        if (current_ext_byte == '\0') {
-            break; // Found extension
-        }
-
-        ext_bytes_read++;
-    }
-
-    // --- Step 5: Finalizar y Asignar Tamaños ---
-    *extracted_data_len = (size_t)data_size;
-    *extension_len = ext_bytes_read + 1;
-
-    return data_buffer;
+    ExtractionContext ctx = {0};
+    return extract_payload_generic(image, extracted_data_len, extension_len, get_next_byte_lsb1, &ctx);
 }
 
 // -------------------------------------- LSB4 --------------------------------------
@@ -362,105 +250,8 @@ int embed_lsb4(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
 }
 
 unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
-    if (!image || !image->in) {
-        fprintf(stderr, ERR_INVALID_BMP);
-        return NULL;
-    }
-
-    unsigned char size_buffer[4] = {0};
-    Pixel current_pixel;
-    int bit_count = 0;
-
-    // --- Step 1: Extract 32-bit Size Header (8 nibbles, MSB-first) ---
-    for (int i = 0; i < 8; i++) {
-        unsigned char nibble = extract_nibble(image, &bit_count, &current_pixel);
-        if (nibble == 0xFF) return NULL;
-
-        int byte_idx = i / 2;
-        int nibble_in_byte = i % 2;
-
-        if (nibble_in_byte == 0) {
-            size_buffer[byte_idx] |= (nibble << 4);
-        } else {
-            size_buffer[byte_idx] |= nibble;
-        }
-    }
-
-    uint32_t data_size = read_size_header(size_buffer);
-
-    // Sanity check
-    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
-    if (data_size == 0 || data_size > max_capacity_bytes) {
-        fprintf(stderr, "Error: Invalid or impossibly large data size extracted: %u\n", data_size);
-        return NULL;
-    }
-
-    // --- Step 2: Allocate memory for the file data + extension ---
-    size_t total_buffer_allocation = (size_t)data_size + MAX_EXT_LEN;
-    unsigned char *data_buffer = malloc(total_buffer_allocation);
-    if (!data_buffer) {
-        fprintf(stderr, "Error: Failed to allocate memory for extracted data.\n");
-        return NULL;
-    }
-    memset(data_buffer, 0, total_buffer_allocation);
-
-    // --- Step 3: Extract Data (data_size bytes) ---
-    size_t current_byte_idx = 0;
-
-    while (current_byte_idx < data_size) {
-        unsigned char output_byte = 0;
-
-        // NIBBLE 1 (MSB)
-        unsigned char nibble1 = extract_nibble(image, &bit_count, &current_pixel);
-        if (nibble1 == 0xFF) { free(data_buffer); return NULL; }
-        output_byte |= (nibble1 << 4);
-
-        // NIBBLE 2 (LSB)
-        unsigned char nibble2 = extract_nibble(image, &bit_count, &current_pixel);
-        if (nibble2 == 0xFF) { free(data_buffer); return NULL; }
-        output_byte |= nibble2;
-
-        data_buffer[current_byte_idx] = output_byte;
-        current_byte_idx++;
-    }
-
-    // --- Step 4: Extract Extension (secuencial hasta '\0') ---
-    size_t ext_start_byte = data_size;
-    size_t ext_bytes_read = 0;
-
-    while (ext_bytes_read < MAX_EXT_LEN) {
-        unsigned char current_ext_byte = 0;
-
-        // NIBBLE 1 (MSB)
-        unsigned char nibble1 = extract_nibble(image, &bit_count, &current_pixel);
-        if (nibble1 == 0xFF) { free(data_buffer); return NULL; }
-        current_ext_byte |= (nibble1 << 4);
-
-        // NIBBLE 2 (LSB)
-        unsigned char nibble2 = extract_nibble(image, &bit_count, &current_pixel);
-        if (nibble2 == 0xFF) { free(data_buffer); return NULL; }
-        current_ext_byte |= nibble2;
-
-        data_buffer[ext_start_byte + ext_bytes_read] = current_ext_byte;
-
-        if (current_ext_byte == '\0') {
-            break;
-        }
-
-        ext_bytes_read++;
-    }
-
-    if (ext_bytes_read >= MAX_EXT_LEN) {
-        fprintf(stderr, "Error: Extension length exceeded maximum allowed size (%d bytes) without terminator.\n", MAX_EXT_LEN);
-        free(data_buffer);
-        return NULL;
-    }
-
-    // --- Step 5: Finalizar y Asignar Tamaños ---
-    *extracted_data_len = (size_t)data_size;
-    *extension_len = ext_bytes_read + 1;
-
-    return data_buffer;
+    ExtractionContext ctx = {0};
+    return extract_payload_generic(image, extracted_data_len, extension_len, get_next_byte_lsb4, &ctx);
 }
 
 // -------------------------------------- LSBI --------------------------------------
@@ -537,20 +328,8 @@ void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx) {
 }
 
 int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffer_len) {
-    unsigned char *bmp_comp_data = NULL; // Componentes B y G cargados
-    size_t total_comp_count = 0;         // Cantidad de componentes B y G cargados
+    unsigned char *bmp_comp_data = NULL;
     unsigned char calculated_map = 0;
-
-    if (lsbi_load_bg_components(image, &bmp_comp_data, &total_comp_count) != 0) {
-        return EXIT_FAILURE;
-    }
-
-    calculated_map = lsbi_analyze_and_generate_map(
-            secret_buffer,
-            buffer_len,
-            bmp_comp_data,
-            total_comp_count
-    );
 
     free(bmp_comp_data);
 
@@ -580,4 +359,87 @@ int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     }
 
     return EXIT_SUCCESS;
+}
+
+unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
+    if (!image || !image->in) {
+        fprintf(stderr, ERR_INVALID_BMP);
+        return NULL;
+    }
+
+    unsigned char inversion_map = 0;
+    unsigned char size_buffer[4] = {0};
+    Pixel current_pixel = {0};
+    int bit_count = 0;
+    uint32_t data_size = 0;
+    long max_capacity_bytes = get_pixel_count(image) * 3 / 8;
+
+    // --- Step 1: Extract Control Map (4 bits, LSB1 Standard) ---
+    for (int i = 0; i < LSBI_CONTROL_BITS; i++) {
+        int extracted_lsb = extract_next_bit(image, &bit_count, &current_pixel);
+        if (extracted_lsb == -1) return NULL;
+        if (extracted_lsb) {
+            inversion_map |= (1 << i);
+        }
+    }
+
+    // --- Step 2: Extract Header (4 Bytes, using LSBI Logic) ---
+    for (int i = 0; i < 4; i++) {
+        int extracted_byte = extract_msb_byte(image, &bit_count, &current_pixel, inversion_map, lsbi_extract_data_bit);
+        if (extracted_byte == -1) return NULL;
+        size_buffer[i] = (unsigned char)extracted_byte;
+    }
+
+    data_size = read_size_header(size_buffer);
+    if (data_size == 0 || data_size > max_capacity_bytes) return NULL;
+
+    // --- Step 3: Allocate memory for Data + Extension ---
+    size_t total_data_allocation = (size_t)data_size + MAX_EXT_LEN;
+    unsigned char *data_buffer = malloc(total_data_allocation);
+    if (!data_buffer) return NULL;
+    memset(data_buffer, 0, total_data_allocation);
+    size_t current_byte_idx = 0;
+
+    // --- Step 4: Extract Data (data_size bytes) ---
+    while (current_byte_idx < data_size) {
+        int extracted_byte = extract_msb_byte(image, &bit_count, &current_pixel, inversion_map, lsbi_extract_data_bit);
+        if (extracted_byte == -1) {
+            fprintf(stderr, "Error: Unexpected end of file during data extraction.\n");
+            free(data_buffer);
+            return NULL;
+        }
+        data_buffer[current_byte_idx] = (unsigned char)extracted_byte;
+        current_byte_idx++;
+    }
+
+    // --- Step 5: Extract Extension (Sequentially until '\0') ---
+    size_t ext_bytes_read = 0;
+    size_t ext_start_byte = data_size;
+
+    while (ext_bytes_read < MAX_EXT_LEN) {
+        int extracted_byte = extract_msb_byte(image, &bit_count, &current_pixel, inversion_map, lsbi_extract_data_bit);
+        if (extracted_byte == -1) {
+            fprintf(stderr, "Error: Unexpected end of file before finding extension terminator.\n");
+            free(data_buffer);
+            return NULL;
+        }
+
+        data_buffer[ext_start_byte + ext_bytes_read] = (unsigned char)extracted_byte;
+        if (data_buffer[ext_start_byte + ext_bytes_read] == '\0') {
+            break;
+        }
+        ext_bytes_read++;
+    }
+
+    if (ext_bytes_read >= MAX_EXT_LEN) {
+        fprintf(stderr, "Error: Extension length exceeded maximum allowed size (%d bytes) without terminator.\n", MAX_EXT_LEN);
+        free(data_buffer);
+        return NULL;
+    }
+
+    // --- Step 6: Finalize and Assign Lengths ---
+    *extracted_data_len = (size_t)data_size;
+    *extension_len = ext_bytes_read + 1;
+
+    return data_buffer;
 }

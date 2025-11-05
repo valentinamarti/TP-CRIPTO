@@ -102,3 +102,10 @@ void free_secret_buffer(unsigned char *buffer) {
         free(buffer);
     }
 }
+
+int get_nth_bit(const unsigned char *data_buffer, size_t n) {
+    size_t byte_idx = n / 8;
+    size_t bit_pos = n % 8;
+
+    return (data_buffer[byte_idx] >> (7 - bit_pos)) & 1;
+}

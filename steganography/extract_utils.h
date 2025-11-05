@@ -45,4 +45,22 @@ uint32_t read_size_header(unsigned char *buffer);
  */
 unsigned char extract_nibble(BMPImage *image, int *bit_count, Pixel *current_pixel);
 
+/**
+ * @brief Extrae un byte completo utilizando una función auxiliar de extracción de bits.
+ * @param bit_extractor La función a usar para obtener el siguiente bit (ej: lsbi_extract_data_bit).
+ * @return El byte ensamblado (MSB-first), o -1 en caso de error.
+ */
+int extract_msb_byte(BMPImage *image, int *bit_count, Pixel *current_pixel, unsigned char inversion_map, int (*bit_extractor)(BMPImage *, int *, Pixel *, unsigned char));
+
+
+/**
+ * @brief Extrae el siguiente bit de datos aplicando las reglas LSBI (MSB-First, Salto R, Re-inversión).
+ * * @param image Puntero al BMPImage.
+ * @param bit_count Puntero al contador de componentes (0=B, 1=G, 2=R).
+ * @param current_pixel Puntero al píxel actual.
+ * @param inversion_map Mapa de 4 bits para la lógica de inversión condicional.
+ * @return El bit de secreto final (0 o 1), o -1 en caso de error de lectura.
+ */
+int lsbi_extract_data_bit(BMPImage *image, int *bit_count, Pixel *current_pixel, unsigned char inversion_map);
+
 #endif

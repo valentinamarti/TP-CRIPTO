@@ -45,7 +45,7 @@ int handle_embed_mode(const ProgramArgs *args) {
         bits_per_pixel = LSB4_BITS_PER_PIXEL;
         required_bits = buffer_len_bytes * 8;
     } else if (strcmp(args->steg_algorithm, "LSBI") == 0) {
-        bits_per_pixel = LSB1_BITS_PER_PIXEL;
+        bits_per_pixel = LSBI_BITS_PER_PIXEL;
         required_bits = (buffer_len_bytes * 8) + LSBI_CONTROL_BITS;
     } else {
         fprintf(stderr, ERR_INVALID_STEG_ALGORITHM, args->steg_algorithm);
@@ -165,6 +165,8 @@ int handle_extract_mode(const ProgramArgs *args) {
         extracted_buffer = lsb1_extract(image, &extracted_len,&extension_len);
     } else if (strcmp(args->steg_algorithm, "LSB4") == 0) {
         extracted_buffer = lsb4_extract(image, &extracted_len,&extension_len);
+    } else if (strcmp(args->steg_algorithm, "LSBI") == 0) {
+        extracted_buffer = lsbi_extract(image, &extracted_len,&extension_len);
     } else {
         fprintf(stderr, "Error: Steganography algorithm '%s' not supported for extraction.\n", args->steg_algorithm);
         goto cleanup_ext;

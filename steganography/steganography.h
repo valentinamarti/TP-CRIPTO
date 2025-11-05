@@ -6,6 +6,7 @@
 #include "../bmp_lib.h"
 
 #define LSBI_PATTERNS 4 // 00, 01, 10, 11
+#define MAX_EXT_LEN 256
 
 
 /**
@@ -26,6 +27,14 @@ typedef struct {
     long count_normal[LSBI_PATTERNS];
     long count_inverted[LSBI_PATTERNS];
 } LSBIChangeCounts;
+
+typedef struct {
+    int bit_count;
+    Pixel current_pixel;
+    unsigned char inversion_map;
+} ExtractionContext;
+
+typedef int (*get_next_byte_func_t)(BMPImage *, ExtractionContext *);
 
 /**
  * @brief Hides the pre-built secret buffer inside a BMP using the LSB1 algorithm.
@@ -63,6 +72,7 @@ void lsb1_embed_pixel_callback(Pixel *pixel, void *ctx);
  *
  * @param image Pointer to an *opened* BMPImage structure (must have valid 'in' file).
  * @param extracted_data_len Pointer to a size_t variable to store the length of the extracted data.
+ * @param extension_len Pointer to a size_t variable to store the length of the extracted extension (including the trailing null byte '\0').
  * @return A pointer to the dynamically allocated buffer containing the extracted data,
  * or NULL on error (e.g., read error, allocation failure).
  */
@@ -101,6 +111,7 @@ void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx);
  *
  * @param image Pointer to an *opened* BMPImage structure (must have valid 'in' file).
  * @param extracted_data_len Pointer to a size_t variable to store the length of the extracted data.
+ * @param extension_len Pointer to a size_t variable to store the length of the extracted extension (including the trailing null byte '\0').
  * @return A pointer to the dynamically allocated buffer containing the extracted data,
  * or NULL on error (e.g., read error, allocation failure).
  */
@@ -127,5 +138,20 @@ int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
  * @param ctx Pointer to the context (StegoContext) holding the secret buffer and index.
  */
 void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx);
+
+/**
+ * @brief Extracts a hidden secret payload from a BMP image using the LSBI (LSB Improved) steganography algorithm.
+ *
+ * This function performs a multi-phase extraction:
+ * 1. **Extracts a 4-bit Inversion Map** using standard LSB1 logic.
+ * 2. **Applies conditional re-inversion** logic based on the Map and the 2nd/3rd LSBs of the carrier components, while **skipping the Red channel** (LSBI rule).
+ * 3. Sequentially extracts the **Big Endian size header**, the file data, and the null-terminated extension, ensuring **MSB-first** assembly.
+ *
+ * @param image Pointer to an opened BMPImage structure (the carrier).
+ * @param extracted_data_len Pointer to a size_t variable to store the length of the original file data (excluding extension).
+ * @param extension_len Pointer to a size_t variable to store the length of the extracted extension (including the trailing null byte '\0').
+ * @return A pointer to the dynamically allocated buffer containing the full extracted payload (Data || Extension), or NULL on error.
+ */
+unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len);
 
 #endif
