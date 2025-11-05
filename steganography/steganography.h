@@ -6,8 +6,7 @@
 #include "../bmp_lib.h"
 
 #define LSBI_PATTERNS 4 // 00, 01, 10, 11
-#define LSBI_OVERHEAD 4 // 4 bits de control
-#define CHUNK_SIZE 16
+
 
 /**
  * @brief Steganography context structure.
