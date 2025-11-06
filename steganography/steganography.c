@@ -19,8 +19,8 @@
  * @param ctx Pointer to the context structure containing state (bit_count, pixel, map).
  * @return Pointer to the extracted payload buffer, or NULL on error.
  */
-static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size_out, size_t *ext_len_out, get_next_byte_func_t get_next_byte_func, ExtractionContext *ctx) {
-    // 1. Extract Header (4 bytes)
+static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size_out, size_t *ext_len_out, get_next_byte_func_t get_next_byte_func, ExtractionContext *ctx, char encrypted) {
+    // --- Step 1: Extract Header (4 bytes) ---
     unsigned char size_buffer[4] = {0};
     for (int i = 0; i < 4; i++) {
         int extracted_byte = get_next_byte_func(image, ctx);
@@ -37,13 +37,13 @@ static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size
         return NULL;
     }
 
-    // 2. Allocate Buffer
+    // --- Step 2: Allocate Buffer ---
     size_t total_buffer_allocation = (size_t)data_size + MAX_EXT_LEN;
     unsigned char *data_buffer = malloc(total_buffer_allocation);
     if (!data_buffer) return NULL;
     memset(data_buffer, 0, total_buffer_allocation);
 
-    // 3. Extract Data
+    // --- Step 3: Extract Data ---
     size_t current_byte_idx = 0;
     while (current_byte_idx < data_size) {
         int extracted_byte = get_next_byte_func(image, ctx);
@@ -56,7 +56,14 @@ static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size
         current_byte_idx++;
     }
 
-    // 4. Extract Extension
+    // --- Step 4: If encrypted the extension is in the data buffer ---
+    if (encrypted != TRUE) {
+        *data_size_out = (size_t)data_size;
+        *ext_len_out = 0;
+        return data_buffer;
+    }
+
+    // --- Step 5: Extract Extension ---
     size_t ext_start_byte = data_size;
     size_t ext_bytes_read = 0;
 
@@ -83,7 +90,7 @@ static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size
         return NULL;
     }
 
-    // 5. Finalize and Assign Lengths
+    // --- Step 6: Finalize and Assign Lengths ---
     *data_size_out = (size_t)data_size;
     *ext_len_out = ext_bytes_read + 1;
 
@@ -271,9 +278,9 @@ static int get_next_byte_lsb1(BMPImage *image, ExtractionContext *ctx) {
     return (int)assembled_byte;
 }
 
-unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
+unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len, char encrypted) {
     ExtractionContext ctx = {0};
-    return extract_payload_generic(image, extracted_data_len, extension_len, get_next_byte_lsb1, &ctx);
+    return extract_payload_generic(image, extracted_data_len, extension_len, get_next_byte_lsb1, &ctx, encrypted);
 }
 
 // -------------------------------------- LSB4 --------------------------------------
@@ -359,9 +366,9 @@ static int get_next_byte_lsb4(BMPImage *image, ExtractionContext *ctx) {
     return (int)output_byte;
 }
 
-unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
+unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len, char encrypted) {
     ExtractionContext ctx = {0};
-    return extract_payload_generic(image, extracted_data_len, extension_len, get_next_byte_lsb4, &ctx);
+    return extract_payload_generic(image, extracted_data_len, extension_len, get_next_byte_lsb4, &ctx, encrypted);
 }
 
 // -------------------------------------- LSBI --------------------------------------
@@ -442,7 +449,7 @@ int embed_lsbi(BMPImage *image, const unsigned char *secret_buffer, size_t buffe
     return perform_final_embedding(image, secret_buffer, buffer_len, inversion_map, required_bits);
 }
 
-unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len) {
+unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len, char encrypted) {
     if (!image || !image->in) {
         fprintf(stderr, ERR_INVALID_BMP);
         return NULL;
@@ -493,7 +500,14 @@ unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t 
         current_byte_idx++;
     }
 
-    // --- Step 5: Extract Extension (Sequentially until '\0') ---
+    // --- Step 5: If encrypted the extension is in the data buffer ---
+    if (encrypted) {
+        *extracted_data_len = (size_t)data_size;
+        *extension_len = 0;
+        return data_buffer;
+    }
+
+    // --- Step 6: Extract Extension (Sequentially until '\0') ---
     size_t ext_bytes_read = 0;
     size_t ext_start_byte = data_size;
 
@@ -518,7 +532,7 @@ unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t 
         return NULL;
     }
 
-    // --- Step 6: Finalize and Assign Lengths ---
+    // --- Step 7: Finalize and Assign Lengths ---
     *extracted_data_len = (size_t)data_size;
     *extension_len = ext_bytes_read + 1;
 

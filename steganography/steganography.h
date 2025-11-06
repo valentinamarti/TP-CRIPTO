@@ -77,7 +77,7 @@ void lsb1_embed_pixel_callback(Pixel *pixel, void *ctx);
  * @return A pointer to the dynamically allocated buffer containing the extracted data,
  * or NULL on error (e.g., read error, allocation failure).
  */
- unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len,size_t *extension_len);
+ unsigned char *lsb1_extract(BMPImage *image, size_t *extracted_data_len,size_t *extension_len, char encrypted);
 
 /**
  * @brief Hides the pre-built secret buffer inside a BMP using the LSB4 algorithm.
@@ -116,7 +116,7 @@ void lsb4_embed_pixel_callback(Pixel *pixel, void *ctx);
  * @return A pointer to the dynamically allocated buffer containing the extracted data,
  * or NULL on error (e.g., read error, allocation failure).
  */
-unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len);
+unsigned char *lsb4_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len, char encrypted);
 
 
 /**
@@ -153,6 +153,6 @@ void lsbi_embed_pixel_callback(Pixel *pixel, void *ctx);
  * @param extension_len Pointer to a size_t variable to store the length of the extracted extension (including the trailing null byte '\0').
  * @return A pointer to the dynamically allocated buffer containing the full extracted payload (Data || Extension), or NULL on error.
  */
-unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len);
+unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t *extension_len, char encrypted);
 
 #endif

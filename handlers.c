@@ -153,6 +153,10 @@ int handle_extract_mode(const ProgramArgs *args) {
     unsigned char *extracted_buffer = NULL; // Buffer: (encrypted data) or (real data || ext)
     unsigned char *decrypted_buffer = NULL; // Buffer: (size || real data || ext)
     int result = NO_SUCCESS;
+    char encrypted = FALSE;
+    if (args->password) {
+        encrypted = TRUE;
+    }
     size_t extracted_len;
     size_t extension_len;
 
@@ -162,11 +166,11 @@ int handle_extract_mode(const ProgramArgs *args) {
     }
 
     if (strcmp(args->steg_algorithm, "LSB1") == 0) {
-        extracted_buffer = lsb1_extract(image, &extracted_len,&extension_len);
+        extracted_buffer = lsb1_extract(image, &extracted_len,&extension_len, encrypted);
     } else if (strcmp(args->steg_algorithm, "LSB4") == 0) {
-        extracted_buffer = lsb4_extract(image, &extracted_len,&extension_len);
+        extracted_buffer = lsb4_extract(image, &extracted_len,&extension_len, encrypted);
     } else if (strcmp(args->steg_algorithm, "LSBI") == 0) {
-        extracted_buffer = lsbi_extract(image, &extracted_len,&extension_len);
+        extracted_buffer = lsbi_extract(image, &extracted_len,&extension_len, encrypted);
     } else {
         fprintf(stderr, "Error: Steganography algorithm '%s' not supported for extraction.\n", args->steg_algorithm);
         goto cleanup_ext;
