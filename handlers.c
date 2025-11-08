@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 // Módulos del proyecto
 #include "handlers.h"
@@ -204,7 +205,41 @@ int handle_extract_mode(const ProgramArgs *args) {
             goto cleanup_ext;
         }
 
-        if (write_secret_from_buffer(args->output_file, decrypted_buffer, decrypted_len,extension_len) == 0) {
+        // Parse decrypted buffer: (real_size || real_data || ext)
+        // The decrypted buffer contains the original structure from build_secret_buffer
+        if (decrypted_len < (int) sizeof(uint32_t)) {
+            fprintf(stderr, "Error: Decrypted data too short to contain size header.\n");
+            goto cleanup_ext;
+        }
+
+        // real size from first 4 bytes (big-endian)
+        uint32_t real_data_size = read_size_header(decrypted_buffer);
+        
+        // expected total size: size_header + data + extension
+        size_t min_expected_size = sizeof(uint32_t) + real_data_size + 1; // at least 1 byte for extension (null terminator)
+        if (decrypted_len < (int) min_expected_size) {
+            fprintf(stderr, "Error: Decrypted data too short. Expected at least %zu bytes, got %d.\n", min_expected_size, decrypted_len);
+            goto cleanup_ext;
+        }
+
+        unsigned char *real_data_ptr = decrypted_buffer + sizeof(uint32_t);
+        const unsigned char *ext_ptr = real_data_ptr + real_data_size;
+        size_t ext_len = decrypted_len - sizeof(uint32_t) - real_data_size;
+
+        // verify null terminator for extension
+        if (ext_len < 1) {
+            fprintf(stderr, "Error: Decrypted data missing extension terminator.\n");
+            goto cleanup_ext;
+        }
+
+        // last byte should be '\0'
+        if (ext_ptr[ext_len - 1] != '\0') {
+            fprintf(stderr, "Error: Extension in decrypted data is not properly null-terminated.\n");
+            goto cleanup_ext;
+        }
+
+        // Write the file using the parsed data
+        if (write_secret_from_buffer(args->output_file, real_data_ptr, real_data_size, ext_len) == 0) {
             result = SUCCESS;
         }
 

@@ -56,45 +56,48 @@ static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size
         current_byte_idx++;
     }
 
-    // --- Step 4: If encrypted the extension is in the data buffer ---
+    // --- Step 4: Handle encrypted vs non-encrypted ---
     if (encrypted != TRUE) {
-        *data_size_out = (size_t)data_size;
-        *ext_len_out = 0;
-        return data_buffer;
-    }
+        // Non-encrypted: Extract extension after data
+        // --- Step 5: Extract Extension ---
+        size_t ext_start_byte = data_size;
+        size_t ext_bytes_read = 0;
 
-    // --- Step 5: Extract Extension ---
-    size_t ext_start_byte = data_size;
-    size_t ext_bytes_read = 0;
+        while (ext_bytes_read < MAX_EXT_LEN) {
+            int extracted_byte = get_next_byte_func(image, ctx);
+            if (extracted_byte == -1) {
+                fprintf(stderr, "Error: Unexpected end of file before finding extension terminator.\n");
+                free(data_buffer);
+                return NULL;
+            }
 
-    while (ext_bytes_read < MAX_EXT_LEN) {
-        int extracted_byte = get_next_byte_func(image, ctx);
-        if (extracted_byte == -1) {
-            fprintf(stderr, "Error: Unexpected end of file before finding extension terminator.\n");
+            data_buffer[ext_start_byte + ext_bytes_read] = (unsigned char)extracted_byte;
+
+            if (data_buffer[ext_start_byte + ext_bytes_read] == '\0') {
+                break;
+            }
+
+            ext_bytes_read++;
+        }
+
+        if (ext_bytes_read >= MAX_EXT_LEN) {
+            fprintf(stderr, "Error: Extension length exceeded maximum allowed size (%d bytes) without terminator.\n", MAX_EXT_LEN);
             free(data_buffer);
             return NULL;
         }
 
-        data_buffer[ext_start_byte + ext_bytes_read] = (unsigned char)extracted_byte;
+        // --- Step 6: Finalize and Assign Lengths ---
+        *data_size_out = (size_t)data_size;
+        *ext_len_out = ext_bytes_read + 1;
 
-        if (data_buffer[ext_start_byte + ext_bytes_read] == '\0') {
-            break;
-        }
-
-        ext_bytes_read++;
+        return data_buffer;
+    } else {
+        // Encrypted: Extension is inside encrypted data, not after it
+        // Just return the encrypted data buffer
+        *data_size_out = (size_t)data_size;
+        *ext_len_out = 0;  // Will be extracted after decryption
+        return data_buffer;
     }
-
-    if (ext_bytes_read >= MAX_EXT_LEN) {
-        fprintf(stderr, "Error: Extension length exceeded maximum allowed size (%d bytes) without terminator.\n", MAX_EXT_LEN);
-        free(data_buffer);
-        return NULL;
-    }
-
-    // --- Step 6: Finalize and Assign Lengths ---
-    *data_size_out = (size_t)data_size;
-    *ext_len_out = ext_bytes_read + 1;
-
-    return data_buffer;
 }
 
 /**

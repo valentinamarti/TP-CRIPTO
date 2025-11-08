@@ -67,14 +67,14 @@ Importante: Al extraer, el programa automáticamente agregará la extensión ori
 Ejemplo SIN encriptación:
 
 ```bash
-# Esto creará "secreto_extraido.txt"
+# Esto creará "secreto_extraido"
 ./stegobmp -extract -p stego.bmp -out secreto_extraido -steg LSB1
 ```
 
 Ejemplo CON encriptación (AES-256 CBC):
 
 ```bash
-# Esto creará "secreto_extraido.txt"
+# Esto creará "secreto_extraido"
 ./stegobmp -extract -p stego.bmp -out secreto_extraido -steg LSB1 -a aes256 -m cbc -pass "mi_password_123"
 ```
 

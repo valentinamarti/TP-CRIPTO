@@ -42,11 +42,10 @@ int derive_key_iv_pbkdf2(const char *password, const EVP_CIPHER *cipher, unsigne
     int iv_len = EVP_CIPHER_iv_length(cipher);
     int total_len = key_len + iv_len;
 
-    // PKCS5_PBKDF2_HMAC (SHA-1 por defecto)
     if (PKCS5_PBKDF2_HMAC(password, strlen(password),
                           FIXED_SALT, FIXED_SALT_LEN,
                           10000, // iterations
-                          EVP_sha1(), // hash function
+                          EVP_sha256(), // hash function (SHA-256) - la que se usó en los archivos de la cátedra
                           total_len, key_iv_buffer) == 0) {
         fprintf(stderr, "Error: Falló la derivación de clave PBKDF2.\n");
         return -1;

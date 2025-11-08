@@ -3,7 +3,7 @@
 # --- Config ---
 EXECUTABLE="../stegobmp"
 CARRIER="blue-bmp-24-bit.bmp"
-SECRET_FILE="secreto.txt"
+SECRET_FILE="secreto"
 STEGO_FILE="stego_test.bmp"
 EXTRACTED_FILE="extraido_test"
 PASSWORD="mi_password_seguro_123!"
@@ -23,7 +23,7 @@ FAILURES=0
 # --- Función de Limpieza ---
 # Se ejecuta al salir del script
 cleanup() {
-    rm -f "$SECRET_FILE" "$STEGO_FILE" "${EXTRACTED_FILE}.txt"
+    rm -f "$SECRET_FILE" "$STEGO_FILE" "$EXTRACTED_FILE"
 }
 trap cleanup EXIT
 
@@ -37,7 +37,7 @@ check_result() {
         echo -e "  ${RED}FAIL${NC}: $2 (Los archivos no coinciden)"
         FAILURES=$((FAILURES + 1))
     fi
-    rm -f "$STEGO_FILE" "${EXTRACTED_FILE}.txt"
+    rm -f "$STEGO_FILE" "${EXTRACTED_FILE}"
 }
 
 # --- Función de Verificación de Fallo Esperado ---
@@ -50,7 +50,7 @@ check_fail() {
         echo -e "  ${RED}FAIL${NC}: $2 (Debía fallar, pero funcionó)"
         FAILURES=$((FAILURES + 1))
     fi
-    rm -f "$STEGO_FILE" "${EXTRACTED_FILE}.txt"
+    rm -f "$STEGO_FILE" "$EXTRACTED_FILE"
 }
 
 
@@ -73,15 +73,31 @@ for algo in $ALGOS; do
     for mode in $MODES; do
         TEST_NAME="$algo / $mode"
 
-        # Embed
-        "$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -a "$algo" -m "$mode" -pass "$PASSWORD" &>/dev/null
-
-        # Extract
-        "$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -a "$algo" -m "$mode" -pass "$PASSWORD" &>/dev/null
-
-        # Verify
-        diff "$SECRET_FILE" "${EXTRACTED_FILE}.txt" &>/dev/null
-        check_result $? "$TEST_NAME"
+        # Embed (silence stdout, but keep stderr for errors)
+        if "$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -a "$algo" -m "$mode" -pass "$PASSWORD" >/dev/null 2>&1; then
+            # Embed succeeded (exit code 0)
+            # Extract (silence stdout, but keep stderr for errors)
+            if "$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -a "$algo" -m "$mode" -pass "$PASSWORD" >/dev/null 2>&1; then
+                # Extract succeeded (exit code 0)
+                # Verify file exists and compare
+                if [ -f "${EXTRACTED_FILE}" ]; then
+                    diff "$SECRET_FILE" "${EXTRACTED_FILE}" &>/dev/null
+                    check_result $? "$TEST_NAME"
+                else
+                    echo -e "  ${RED}FAIL${NC}: $TEST_NAME (Archivo extraído no existe)"
+                    FAILURES=$((FAILURES + 1))
+                    rm -f "$STEGO_FILE" "${EXTRACTED_FILE}"
+                fi
+            else
+                echo -e "  ${RED}FAIL${NC}: $TEST_NAME (Extract falló)"
+                FAILURES=$((FAILURES + 1))
+                rm -f "$STEGO_FILE" "${EXTRACTED_FILE}"
+            fi
+        else
+            echo -e "  ${RED}FAIL${NC}: $TEST_NAME (Embed falló)"
+            FAILURES=$((FAILURES + 1))
+            rm -f "$STEGO_FILE" "${EXTRACTED_FILE}"
+        fi
     done
 done
 
@@ -91,34 +107,70 @@ echo
 echo "--- Pruebas de Defaults ---"
 
 # Prueba A: Solo -pass (Default: aes128-cbc)
-"$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -pass "$PASSWORD" &>/dev/null
-"$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -pass "$PASSWORD" &>/dev/null
-diff "$SECRET_FILE" "${EXTRACTED_FILE}.txt" &>/dev/null
-check_result $? "Default (solo -pass)"
+if "$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -pass "$PASSWORD" >/dev/null 2>&1; then
+    if "$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -pass "$PASSWORD" >/dev/null 2>&1; then
+        if [ -f "${EXTRACTED_FILE}" ]; then
+            diff "$SECRET_FILE" "${EXTRACTED_FILE}" &>/dev/null
+            check_result $? "Default (solo -pass)"
+        else
+            check_result 1 "Default (solo -pass) (Archivo extraído no existe)"
+        fi
+    else
+        check_result 1 "Default (solo -pass) (Extract falló)"
+    fi
+else
+    check_result 1 "Default (solo -pass) (Embed falló)"
+fi
 
 # Prueba B: -pass y -a (Default: cbc)
-"$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -a 3des -pass "$PASSWORD" &>/dev/null
-"$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -a 3des -pass "$PASSWORD" &>/dev/null
-diff "$SECRET_FILE" "${EXTRACTED_FILE}.txt" &>/dev/null
-check_result $? "Default (solo -a 3des, modo cbc)"
+if "$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -a 3des -pass "$PASSWORD" >/dev/null 2>&1; then
+    if "$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -a 3des -pass "$PASSWORD" >/dev/null 2>&1; then
+        if [ -f "${EXTRACTED_FILE}" ]; then
+            diff "$SECRET_FILE" "${EXTRACTED_FILE}" &>/dev/null
+            check_result $? "Default (solo -a 3des, modo cbc)"
+        else
+            check_result 1 "Default (solo -a 3des, modo cbc) (Archivo extraído no existe)"
+        fi
+    else
+        check_result 1 "Default (solo -a 3des, modo cbc) (Extract falló)"
+    fi
+else
+    check_result 1 "Default (solo -a 3des, modo cbc) (Embed falló)"
+fi
 
 # Prueba C: -pass y -m (Default: aes128)
-"$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -m ecb -pass "$PASSWORD" &>/dev/null
-"$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -m ecb -pass "$PASSWORD" &>/dev/null
-diff "$SECRET_FILE" "${EXTRACTED_FILE}.txt" &>/dev/null
-check_result $? "Default (solo -m ecb, algo aes128)"
+if "$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -m ecb -pass "$PASSWORD" >/dev/null 2>&1; then
+    if "$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -m ecb -pass "$PASSWORD" >/dev/null 2>&1; then
+        if [ -f "${EXTRACTED_FILE}" ]; then
+            diff "$SECRET_FILE" "${EXTRACTED_FILE}" &>/dev/null
+            check_result $? "Default (solo -m ecb, algo aes128)"
+        else
+            check_result 1 "Default (solo -m ecb, algo aes128) (Archivo extraído no existe)"
+        fi
+    else
+        check_result 1 "Default (solo -m ecb, algo aes128) (Extract falló)"
+    fi
+else
+    check_result 1 "Default (solo -m ecb, algo aes128) (Embed falló)"
+fi
 
 
 # --- 3. Prueba de Error (Password incorrecto) ---
 echo
 echo "--- Pruebas de Fallo ---"
 # Embed con la contraseña correcta
-"$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -pass "$PASSWORD" &>/dev/null
-
-# Extract con la contraseña INCORRECTA. Debe fallar.
-"$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -pass "PASSWORD_INCORRECTO" &>/dev/null
-# Verificamos que el comando falló (código de retorno != 0)
-check_fail $? "Password incorrecto"
+if "$EXECUTABLE" -embed -in "$SECRET_FILE" -p "$CARRIER" -out "$STEGO_FILE" -steg LSB1 -pass "$PASSWORD" >/dev/null 2>&1; then
+    # Extract con la contraseña INCORRECTA. Debe fallar.
+    if "$EXECUTABLE" -extract -p "$STEGO_FILE" -out "$EXTRACTED_FILE" -steg LSB1 -pass "PASSWORD_INCORRECTO" >/dev/null 2>&1; then
+        # Extract succeeded but should have failed
+        check_fail 0 "Password incorrecto"
+    else
+        # Extract failed as expected
+        check_fail 1 "Password incorrecto"
+    fi
+else
+    check_result 1 "Password incorrecto (Embed falló)"
+fi
 
 
 # --- Resumen Final ---
