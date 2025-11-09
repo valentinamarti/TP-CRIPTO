@@ -86,6 +86,12 @@ static unsigned char *extract_payload_generic(BMPImage *image, size_t *data_size
             return NULL;
         }
 
+        if (ext_bytes_read == 0 || data_buffer[ext_start_byte] != '.') {
+            fprintf(stderr, "Error: Extracted extension does not start with '.' (Invalid format).\n");
+            free(data_buffer);
+            return NULL;
+        }
+
         // --- Step 6: Finalize and Assign Lengths ---
         *data_size_out = (size_t)data_size;
         *ext_len_out = ext_bytes_read + 1;
@@ -531,6 +537,13 @@ unsigned char *lsbi_extract(BMPImage *image, size_t *extracted_data_len, size_t 
 
     if (ext_bytes_read >= MAX_EXT_LEN) {
         fprintf(stderr, "Error: Extension length exceeded maximum allowed size (%d bytes) without terminator.\n", MAX_EXT_LEN);
+        free(data_buffer);
+        return NULL;
+    }
+
+    ext_start_byte = data_size; // Re-definimos esto aquí para la validación
+    if (ext_bytes_read == 0 || data_buffer[ext_start_byte] != '.') {
+        fprintf(stderr, "Error: Extracted extension does not start with '.' (Invalid format).\n");
         free(data_buffer);
         return NULL;
     }
