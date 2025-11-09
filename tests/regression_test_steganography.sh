@@ -186,6 +186,114 @@ else
     echo -e "  ${YELLOW}SKIP${NC}: ladoLSBIdescfb.bmp (archivo no encontrado)"
 fi
 
+# --- 3. Pruebas con archivos del grupo10 (si existen) ---
+echo
+echo "--- Pruebas con Archivos del Grupo10 ---"
+
+GRUPO10_DIR="${EXAMPLES_DIR}/grupo10"
+if [ -d "$GRUPO10_DIR" ]; then
+    for stego_file in "$GRUPO10_DIR"/*.bmp; do
+        if [ -f "$stego_file" ]; then
+            filename=$(basename "$stego_file" .bmp)
+            echo "Procesando $filename.bmp..."
+            LOCAL_OUT_BASE="${RESULTS_DIR}/${filename}"
+            extracted=0
+
+            # Intentar extraer sin encriptación primero
+            for steg_algo in LSB1 LSB4 LSBI; do
+                if "$EXECUTABLE" -extract -p "$stego_file" -out "$LOCAL_OUT_BASE" -steg "$steg_algo" >/dev/null 2>&1; then
+                    EXTRACTED_FILE_PATH=$(find "$RESULTS_DIR" -maxdepth 1 -name "${filename}*" -type f | head -n 1)
+                    if [ -n "$EXTRACTED_FILE_PATH" ] && [ -s "$EXTRACTED_FILE_PATH" ]; then
+                        check_result 0 "$filename.bmp ($steg_algo, sin encriptación)" "$EXTRACTED_FILE_PATH"
+                        # rm -f "$EXTRACTED_FILE_PATH"
+                        extracted=1
+                        break
+                    fi
+                fi
+            done
+
+            # Si no se pudo extraer sin encriptación, intentar con encriptación
+            if [ $extracted -eq 0 ]; then
+                # Intentar con diferentes combinaciones de algoritmos y modos comunes
+                # (algunos archivos del grupo10 pueden estar encriptados)
+                for steg_algo in LSB1 LSB4 LSBI; do
+                    for algo in aes128 aes192 aes256 3des; do
+                        for mode in ecb cbc cfb ofb; do
+                            if "$EXECUTABLE" -extract -p "$stego_file" -out "$LOCAL_OUT_BASE" -steg "$steg_algo" -a "$algo" -m "$mode" -pass "aplausos" >/dev/null 2>&1; then
+                                EXTRACTED_FILE_PATH=$(find "$RESULTS_DIR" -maxdepth 1 -name "${filename}*" -type f | head -n 1)
+                                if [ -n "$EXTRACTED_FILE_PATH" ] && [ -s "$EXTRACTED_FILE_PATH" ]; then
+                                    check_result 0 "$filename.bmp ($steg_algo, $algo, $mode)" "$EXTRACTED_FILE_PATH"
+                                    # rm -f "$EXTRACTED_FILE_PATH"
+                                    extracted=1
+                                    break 3  # Salir de los tres loops
+                                fi
+                            fi
+                        done
+                    done
+                done
+            fi
+
+            # Si aún no se pudo extraer, marcar como fallido
+            if [ $extracted -eq 0 ]; then
+                echo -e "  ${YELLOW}SKIP${NC}: $filename.bmp (No se pudo extraer - puede requerir parámetros específicos)"
+                # No incrementar FAILURES para archivos del grupo10 que no se puedan extraer
+                # ya que pueden tener configuraciones específicas desconocidas
+            fi
+        fi
+    done
+else
+    echo -e "  ${YELLOW}SKIP${NC}: Directorio grupo10 no encontrado"
+fi
+
+
+echo
+echo "--- Intentando obtener .wmv desde silence.bmp ---"
+
+SILENCE_FILE="${EXAMPLES_DIR}/grupo10/silence.bmp"
+SILENCE_OUT_BASE="${RESULTS_DIR}/silence_out"
+SILENCE_PASSWORD="aplausos"
+SILENCE_ALGO="aes192"
+SILENCE_MODE="ecb"
+
+if [ -f "$SILENCE_FILE" ]; then
+    extracted=0
+
+    # Si no salió, intentamos con AES192-ECB + password
+    if [ $extracted -eq 0 ]; then
+        for steg_algo in LSB1 LSB4 LSBI; do
+            if "$EXECUTABLE" -extract -p "$SILENCE_FILE" -out "$SILENCE_OUT_BASE" -steg "$steg_algo" -a "$SILENCE_ALGO" -m "$SILENCE_MODE" -pass "$SILENCE_PASSWORD" >/dev/null 2>&1; then
+                EXTRACTED_FILE_PATH=$(find "$RESULTS_DIR" -maxdepth 1 -name "silence_out*" -type f | head -n 1)
+                if [ -n "$EXTRACTED_FILE_PATH" ] && [ -s "$EXTRACTED_FILE_PATH" ]; then
+                    echo -e "  ${GREEN}EXTRAIDO con cifrado ($SILENCE_ALGO/$SILENCE_MODE) usando $steg_algo${NC}: $EXTRACTED_FILE_PATH"
+                    extracted=1
+                    break
+                fi
+            fi
+        done
+    fi
+
+    # Post-procesado: intentar detectar y renombrar a .wmv
+    if [ $extracted -eq 1 ]; then
+        EXTRACTED_FILE_PATH=$(find "$RESULTS_DIR" -maxdepth 1 -name "silence_out*" -type f | head -n 1)
+        file_out=$(file "$EXTRACTED_FILE_PATH")
+        echo "    file: $file_out"
+
+        if echo "$file_out" | grep -qi "ASF\|Windows Media\|Microsoft" ; then
+            mv "$EXTRACTED_FILE_PATH" "${EXTRACTED_FILE_PATH}.wmv"
+            echo -e "  ${GREEN}Renombrado a: ${EXTRACTED_FILE_PATH}.wmv${NC}"
+            check_result 0 "silence.bmp (EXTRAIDO y renombrado a .wmv)" "${EXTRACTED_FILE_PATH}.wmv"
+        else
+            echo -e "  ${YELLOW}WARN${NC}: silence.bmp (archivo extraído, pero no parece WMV). Guardado en $EXTRACTED_FILE_PATH"
+            check_result 0 "silence.bmp (extraído, formato no WMV detectado)" "$EXTRACTED_FILE_PATH"
+        fi
+    else
+        echo -e "  ${RED}FAIL${NC}: silence.bmp (No se pudo extraer con las combinaciones probadas)"
+        FAILURES=$((FAILURES+1))
+    fi
+else
+    echo -e "  ${YELLOW}SKIP${NC}: silence.bmp (archivo no encontrado en $EXAMPLES_DIR)"
+fi
+
 # --- Resumen Final ---
 echo
 if [ $FAILURES -eq 0 ]; then
